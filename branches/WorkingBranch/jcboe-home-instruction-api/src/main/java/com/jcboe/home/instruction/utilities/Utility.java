@@ -1,0 +1,1909 @@
+/*
+ * Copyright (C) YYYY-YYYY XXXXXXXXXXXXX
+ * mailto:AAAA@DDDD.COM
+ *
+ */
+package com.jcboe.home.instruction.utilities;
+
+import java.io.BufferedOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URI;
+import java.net.URL;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.text.SimpleDateFormat;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+
+import javax.servlet.http.HttpServletResponse;
+
+import org.apache.commons.codec.binary.Base64;
+import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream;
+import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.FilenameUtils;
+import org.apache.commons.io.IOUtils;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.mail.javamail.JavaMailSenderImpl;
+import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.stereotype.Component;
+import org.springframework.util.CollectionUtils;
+import org.springframework.util.FileCopyUtils;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.util.UriComponentsBuilder;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.dataformat.xml.XmlMapper;
+import com.google.gson.ExclusionStrategy;
+import com.google.gson.FieldAttributes;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.itextpdf.html2pdf.ConverterProperties;
+import com.itextpdf.html2pdf.HtmlConverter;
+import com.itextpdf.html2pdf.resolver.font.DefaultFontProvider;
+import com.itextpdf.layout.font.FontProvider;
+import com.jcboe.home.instruction.exception.HomeInstructionException;
+import com.jcboe.home.instruction.model.request.ApplicationTrackingDataList;
+import com.jcboe.home.instruction.repo.AppConfigRepo;
+import com.jcboe.home.instruction.repo.ConfigRepo;
+import com.jcboe.home.instruction.response.Form10HSAPPDataResp;
+import com.jcboe.home.instruction.response.Form1AphirDataResp;
+import com.jcboe.home.instruction.response.Form1AphirScheduleResp;
+import com.jcboe.home.instruction.response.Form2RHIDTDataResp;
+import com.jcboe.home.instruction.response.Form3RhiltDataResp;
+import com.jcboe.home.instruction.response.Form4PrthiDataResp;
+import com.jcboe.home.instruction.response.Form630DhiDataResp;
+import com.jcboe.home.instruction.response.Form760DhiDataResp;
+import com.jcboe.home.instruction.response.Form8HiscpDataResp;
+import com.jcboe.home.instruction.response.Form9EAPPDataResp;
+import com.jcboe.home.instruction.response.Form9EAPPPlanDataResp;
+import com.jcboe.home.instruction.response.HomeInstructionConfig;
+import com.jcboe.home.instruction.response.IdsKeyValue;
+import com.jcboe.home.instruction.response.S3UploadResponse;
+import com.jcboe.home.instruction.response.ScreenTextApiResponse;
+
+/*
+ * 
+ * Date: 30-July-2026
+ * Class: Utility.java
+ * Purpose: Utility class use for all application common methods.
+ *
+ */
+@Component
+public class Utility {
+
+	private final Logger logger = LogManager.getLogger(Utility.class);
+
+	@Value("${awsUtility.commonUrl:}")
+	private String commonUrl;
+
+	@Value("${awsUtility.username:}")
+	private String username;
+
+	@Value("${awsUtility.password:}")
+	private String password;
+
+	public Zip4jUtility zip4jUtility;// NOSONAR
+
+	public Utility() {
+		// default constructor
+	}
+
+	private RestTemplate restTemplateUtility;// NOSONAR
+
+	@Value("${temp-file-path:}")
+	private String tempDir;
+
+	private ConfigRepo configRepo;
+	private AppConfigRepo appConfigRepo;
+
+	private static final Pattern ACCOUNT_PATTERN = Pattern.compile("^(\\d{0,3})(\\d{0,3})(\\d{0,4}).*");
+
+	@Autowired
+	public Utility(ConfigRepo configRepo, RestTemplate restTemplate,
+			@Qualifier("restTemplateForUtility") RestTemplate restTemplateUtility, Zip4jUtility zip4jUtility,
+			AppConfigRepo appConfigRepo) {
+		this.configRepo = configRepo;
+		this.restTemplateUtility = restTemplateUtility;
+		this.zip4jUtility = zip4jUtility;
+		this.appConfigRepo = appConfigRepo;
+	}
+
+	/*
+	 * 
+	 * Date: 30-July-2026 Method: stringToXmlFormat Purpose: stringToXmlFormat
+	 * method use for convert a list to xml format.
+	 *
+	 */
+	public String stringToXmlFormat(Object object) throws JsonProcessingException {
+
+		XmlMapper xmlMapper = new XmlMapper();
+		return xmlMapper.writerWithDefaultPrettyPrinter().writeValueAsString(object);
+
+	}
+
+	/*
+	 * 
+	 * Date: 06-Dec-2022 Method: printJson Purpose: printJson method use for print
+	 * into a json data.
+	 *
+	 */
+	public String printJson(Object response) {
+		ExclusionStrategy strategy = new ExclusionStrategy() {
+			@Override
+			public boolean shouldSkipField(FieldAttributes field) {
+				return false;
+			}
+
+			@Override
+			public boolean shouldSkipClass(Class<?> clazz) {
+				return false;
+			}
+		};
+
+		Gson gson = new GsonBuilder().addSerializationExclusionStrategy(strategy).setPrettyPrinting().create();
+
+		return gson.toJson(response);
+
+	}
+
+	public Map<String, String> getConfigList(String configKeys) {
+		Map<String, String> appConfigMap = new LinkedHashMap<>();
+
+		List<HomeInstructionConfig> configList;
+		try {
+			configList = configRepo.getMgmtConfigValuesByKey(configKeys);
+			configList.forEach(config -> appConfigMap.put(config.getConfigKey(), config.getConfigValue()));
+		} catch (Exception e) {
+			logger.error(e.getMessage(), e);
+		}
+
+		return appConfigMap;
+	}
+
+	/*
+	 * 
+	 * Date: 06-Dec-2022 Method: responseDate Purpose: responseDate method formatted
+	 * date.
+	 *
+	 */
+	public String responseDate(LocalDateTime now) {
+		DateTimeFormatter formatter = DateTimeFormatter.ofPattern("MM/dd/yyyy hh:mm a");
+		return now.format(formatter);
+
+	}
+
+	public String createPdf(String emailTemplate, Map<String, String> replacer, String pdfFilePath) {
+		try {
+			String pdfContent[] = { FileUtils.readFileToString(new File(emailTemplate), StandardCharsets.UTF_8) };// NOSONAR
+
+			replacer.forEach((key, val) -> pdfContent[0] = StringUtils.replace(pdfContent[0], key, val));
+
+			String htmlFilePath = new File(tempDir + "/Template.html").getAbsolutePath();
+			FileUtils.writeStringToFile(new File(htmlFilePath), pdfContent[0], StandardCharsets.UTF_8);
+			String generatedPath = generatePDF(htmlFilePath, pdfFilePath);
+
+			permitFileOrFolder(new File(htmlFilePath));
+			FileUtils.forceDelete(new File(htmlFilePath));
+
+			return generatedPath;
+		} catch (Exception e) {
+			logger.error("PDF generation failed: {}{}", e.getMessage(), e);
+			return null;
+		}
+	}
+
+	public void permitFileOrFolder(File f) {
+
+		if (f.exists()) {
+			f.setExecutable(true, false);// NOSONAR
+			f.setReadable(true, false);// NOSONAR
+			f.setWritable(true, false);// NOSONAR
+		}
+
+	}
+
+	public String generatePDF(String inputHtmlPath, String outputPdfPath) {
+
+		try {
+
+			File parent = new File(new File(outputPdfPath).getParent());
+
+			permitFileOrFolder(parent);
+
+			ConverterProperties converterProperties = new ConverterProperties();
+			FontProvider fontProvider = new DefaultFontProvider(true, true, true);
+			converterProperties.setFontProvider(fontProvider);
+
+			HtmlConverter.convertToPdf(new File(inputHtmlPath), new File(outputPdfPath), converterProperties);
+
+			File pdfOriginalFile = new File(outputPdfPath);
+			return pdfOriginalFile.getAbsolutePath();
+		} catch (Exception e) {
+			logger.error(e.getMessage(), e);
+			return null;
+		}
+	}
+
+	// Fileupload
+	public void permitFileAndFolder(File f) {
+
+		if (f.exists()) {
+			f.setReadable(true, false);// NOSONAR
+			f.setWritable(true, false);// NOSONAR
+			f.setExecutable(true, false);// NOSONAR
+		}
+
+	}
+
+	public List<String> getFinancialYears(String inputYear) {
+
+		String[] parts = inputYear.split("-");
+
+		int startYear = 2000 + Integer.parseInt(parts[0]);
+		int endYear = 2000 + Integer.parseInt(parts[1]);
+
+		String currentYear = startYear + "-" + endYear;
+		String previousYear = (startYear - 1) + "-" + (endYear - 1);
+
+		return Arrays.asList(currentYear, previousYear);
+	}
+
+	public String getEmailBody(Map<String, String> replacers, String emailTemplatePath) throws Exception {
+
+		File template = new File(emailTemplatePath);
+
+		if (template.exists()) {
+			String templateContent = FileUtils.readFileToString(template, "UTF-8");// NOSONAR
+			String[] replacedContent = { templateContent };
+			replacers.forEach((key, val) -> {// NOSONAR
+				replacedContent[0] = StringUtils.replace(replacedContent[0], key, val);
+			});
+			return replacedContent[0];
+		} else {
+			throw new Exception("Template File not found in specified path: " + template.getAbsolutePath());
+		}
+
+	}
+
+	public JavaMailSenderImpl configureMailProperties(String senderMailHost, int senderMailPort, String senderEmail,
+			String senderMailPassword, boolean auth) {
+		JavaMailSenderImpl mailSender = new JavaMailSenderImpl();
+
+		mailSender.setHost(senderMailHost);
+		mailSender.setPort(senderMailPort);
+		mailSender.setUsername(senderEmail);
+		Constant.senderMail = senderEmail;// NOSONAR
+
+		Properties props = mailSender.getJavaMailProperties();
+		if (!auth) {
+			props.setProperty("mail.smtp.ssl.enable", "false");
+			props.put("mail.smtp.auth", "false");
+			props.put("mail.smtp.starttls.enable", "false");
+		} else {
+			mailSender.setPassword(senderMailPassword);
+			props.put("mail.smtp.auth", "true");
+			props.put("mail.smtp.starttls.enable", "true");
+		}
+
+		return mailSender;
+	}
+
+	public String replaceSubjectParent(String subject, String studentId, String studentDob) {
+		try {
+
+			return StringUtils.replaceEach(subject, new String[] { "{STUDENT_ID}", "{STUDENT_DOB}" },
+					new String[] { StringUtils.defaultString(studentId), StringUtils.defaultString(studentDob) });
+
+		} catch (Exception e) {
+			return "";
+		}
+	}
+
+	public String replaceSubjectUser(String subject, String empId, String userFName, String userEmail) {
+		try {
+
+			return StringUtils.replaceEach(subject, new String[] { "{EMP_ID}", "{FIRST_NAME}", "{EMAIL_ID}" },
+					new String[] { StringUtils.defaultString(empId), StringUtils.defaultString(userFName),
+							StringUtils.defaultString(userEmail) });
+
+		} catch (Exception e) {
+			return "";
+		}
+	}
+
+	// Fileupload
+	public String getDocEncPass(String registrationDocumentId) throws Exception {
+
+		String encPass = AES.encrypt(registrationDocumentId, Constant.ZIP_ENCRYPTION_PSWRD); // NOSONAR
+
+		if (StringUtils.isEmpty(encPass)) {
+			throw new RuntimeException("Document Encryption failed due to password is empty or null");// NOSONAR
+
+		}
+
+		return encPass;
+	}
+
+	// Fileupload
+	public S3UploadResponse uploadBase64FileToS3(MultipartFile multipartFile, String accessKey, String secretKey,
+			String bucketName, String subFolder, String region, String attachFileName, boolean isCompressed,
+			String fileEncDecPass, String guid, String tempFilePath) throws Exception {// NOSONAR
+
+		try {
+			guid = StringUtils.replace(guid, "-", "");
+			File tempFile = new File(tempFilePath + File.separator + guid + "."
+					+ FilenameUtils.getExtension(multipartFile.getOriginalFilename()));
+
+			multipartFile.transferTo(tempFile);
+
+			File encryptedFile = zip4jUtility.compressWithPassword(tempFile, fileEncDecPass, tempFilePath);
+
+			HttpHeaders headers = new HttpHeaders();
+			headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+
+			MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
+
+			body.add("accessKey", accessKey);
+			body.add("secretKey", secretKey);
+			body.add("region", region);
+			body.add("bucketName", bucketName);
+			body.add("bucketSubfolder", subFolder);
+			body.add("multipartFile", new FileSystemResource(encryptedFile));
+			body.add("encoded", true);
+			body.add("compressed", isCompressed);
+			body.add("guidGeneration", false);
+			body.add("fileOriginalName", guid);
+
+			HttpEntity<MultiValueMap<String, Object>> requestEntity = new HttpEntity<>(body, headers);
+			String url = commonUrl + "/S3FileUpload";
+
+			url = new URI(url).normalize().toString();
+
+			ResponseEntity<S3UploadResponse> response = restTemplateUtility.postForEntity(url, requestEntity,
+					S3UploadResponse.class);
+
+			permitFileAndFolder(tempFile);
+
+			FileUtils.deleteQuietly(tempFile);
+			permitFileAndFolder(encryptedFile);
+			FileUtils.deleteQuietly(encryptedFile);
+
+			return response.getBody();
+		} catch (Exception e) {
+			logger.error("{}{}", e, attachFileName);
+			throw new Exception(e);
+		}
+
+	}
+
+	public List<ScreenTextApiResponse> getScreenTexts() {
+
+		int[] screenIds = { 4, 14, 3, 17, 13, 7, 9, 1, 5, 2, 6, 12, 11, 8 };
+
+		List<ScreenTextApiResponse> responses = new ArrayList<>();
+
+		for (int screenId : screenIds) {
+			try {
+				Map<String, String> fieldKeyValues = new LinkedHashMap<String, String>();
+
+				List<IdsKeyValue> screenTextVal = appConfigRepo.getScreenTextDetails(screenId, 1);
+				if (screenTextVal != null && !screenTextVal.isEmpty()) {// NOSONAR
+
+					if (!StringUtils.equalsAny(screenTextVal.get(0).getKey(), "-1")// NOSONAR
+							&& !StringUtils.equalsAny(screenTextVal.get(0).getKey(), "-2")) {
+
+						for (IdsKeyValue idsKeyValue : screenTextVal) {
+							fieldKeyValues.put(idsKeyValue.getKey(), idsKeyValue.getValue());
+						}
+					}
+				}
+
+				ScreenTextApiResponse apiResponse = new ScreenTextApiResponse();
+				apiResponse.setScreenTexts(fieldKeyValues);
+
+				responses.add(apiResponse);
+
+			} catch (Exception e) {
+				e.printStackTrace();// NOSONAR
+			}
+		}
+
+		return responses;
+	}
+
+	public String getScreenTextBody(List<ScreenTextApiResponse> screenTextApiList, String replace) throws Exception {// NOSONAR
+
+		String[] replacedContent = { replace };
+
+		screenTextApiList.forEach(e -> {
+			Map<String, String> screenTexts = e.getScreenTexts();
+			if (screenTexts != null) {
+				screenTexts.forEach((key, val) -> {// NOSONAR
+					replacedContent[0] = StringUtils.replace(replacedContent[0], "{screenTexts." + key + "}", val);
+				});
+			}
+		});
+
+		return replacedContent[0];
+
+	}
+
+	// Fileupload
+	public void createDirIfNotExists(File dir) {
+
+		if (!dir.exists()) {
+			dir.mkdirs();
+			dir.setReadable(true, false);// NOSONAR
+			dir.setWritable(true, false);// NOSONAR
+			dir.setExecutable(true, false);// NOSONAR
+		}
+
+	}
+
+	// Fileupload
+	public String getBase64EncDoc(MultipartFile file) {
+
+		try {
+			return Base64.encodeBase64String(file.getBytes());
+		} catch (Exception e) {
+			return "";
+		}
+	}
+
+	// Fileupload
+	public String getBase64EncDoc(File file) throws Exception {
+
+		return Base64.encodeBase64String(FileUtils.readFileToByteArray(file));
+
+	}
+
+	// FileUpload
+	public void deleteS3File(String accessKey, String secretKey, String region, String bucketName, String subFolder,
+			String fileKey) throws Exception {// NOSONAR
+
+		String url = commonUrl + "/S3FileDelete?accessKey=" + URLEncoder.encode(accessKey, "UTF-8") + "&bucketName="
+				+ URLEncoder.encode(bucketName, "UTF-8") + "&bucketSubfolder=" + URLEncoder.encode(subFolder, "UTF-8")
+				+ "&region=" + URLEncoder.encode(region, "UTF-8") + "&secretKey="
+				+ URLEncoder.encode(secretKey, "UTF-8") + "&uploadedFileNameWithExt="
+				+ URLEncoder.encode(fileKey, "UTF-8");
+
+		url = new URI(url).normalize().toString();
+
+		URI uri = UriComponentsBuilder.fromUriString(url).build(true).toUri();
+
+		restTemplateUtility.delete(uri);
+
+	}
+
+	/*
+	 * 
+	 * Date: 06-Dec-2022 Method: changeDateFormatPattern Purpose:
+	 * changeDateFormatPattern method checking the date format
+	 *
+	 */
+	public String changeDateFormatPattern(String startDateString, String inputPattern, String opPattern) {
+		try {
+			SimpleDateFormat sdf = new SimpleDateFormat(inputPattern);
+			SimpleDateFormat sdf2 = new SimpleDateFormat(opPattern);
+			return sdf2.format(sdf.parse(startDateString));
+		} catch (Exception e) {
+			return startDateString;
+		}
+	}
+
+	// FileUpload
+	public File decompressGZIP(File input, File output) throws Exception {// NOSONAR
+		try {
+			OutputStream os = new FileOutputStream(output);// NOSONAR
+			GzipCompressorInputStream in = new GzipCompressorInputStream(new FileInputStream(input));// NOSONAR
+			IOUtils.copy(in, os);
+
+			try {
+				in.close();
+				os.close();
+			} catch (Exception e) {// NOSONAR
+				logger.error(e);
+			}
+
+			return output;
+
+		} catch (Exception e) {// NOSONAR
+			throw new Exception(e);// NOSONAR
+		}
+	}
+
+	// FileUpload
+	public File getUnzippedFile(File decodedFile, String fileOriginalName, String attachFileName, String originalExtn,
+			String encDecPass, String temporaryPath) throws Exception {
+
+		return zip4jUtility.decompressWithPassword(decodedFile, fileOriginalName, attachFileName, originalExtn,
+				encDecPass, temporaryPath);
+	}
+
+	// FileUpload
+	public File decodeAndSaveFile(File encodedFile, String tempFilePath, String attachFileName) {
+
+		try {
+
+			String content = FileUtils.readFileToString(encodedFile, StandardCharsets.UTF_8);
+
+			File outFile = new File(tempFilePath + File.separator + attachFileName + ".zip");
+
+			byte[] data = Base64.decodeBase64(content);
+
+			OutputStream os = new BufferedOutputStream(new FileOutputStream(outFile));
+
+			IOUtils.write(data, os);
+
+			try {
+				os.close();
+			} catch (Exception e) {
+				logger.error(e);
+			}
+
+			try {
+				outFile.setExecutable(true);// NOSONAR
+				outFile.setReadable(true);// NOSONAR
+				outFile.setWritable(true);// NOSONAR
+			} catch (Exception e) {
+				logger.error(e);
+			}
+
+			return outFile;
+
+		} catch (Exception e) {
+			logger.error(e);
+			return null;
+		}
+
+	}
+
+	// FileUpload
+	public File downloadFromS3AsStream(String accessKey, String secretKey, String bucketName, String subFolder,
+			String region, String guidFile, String attachFileName, boolean compress, String originalDocName, // NOSONAR
+			String originalExtension, String encDecPass, String temporaryPath) {// NOSONAR
+
+		try {
+
+			String url = commonUrl + "/S3FileDownload?accessKey=" + URLEncoder.encode(accessKey, "UTF-8")
+					+ "&bucketName=" + URLEncoder.encode(bucketName, "UTF-8") + "&bucketSubfolder="
+					+ URLEncoder.encode(subFolder, "UTF-8") + "&encoded=true&originalFileExtension="
+					+ FilenameUtils.getExtension(attachFileName) + "&region=" + URLEncoder.encode(region, "UTF-8")
+					+ "&secretKey=" + URLEncoder.encode(secretKey, "UTF-8") + "&uploadedFileNameWithExt="
+					+ URLEncoder.encode(guidFile, "UTF-8") + ".txt" + "&compressed=" + compress;
+
+			url = new URI(url).normalize().toString();
+
+			String basicAuth = "Basic " + Base64.encodeBase64String((username + ":" + password).getBytes());
+
+			URI uri = UriComponentsBuilder.fromUriString(url).build(true).toUri();
+
+			HttpURLConnection connection = (HttpURLConnection) new URL(uri.toString()).openConnection();// NOSONAR
+			connection.setRequestProperty("Authorization", basicAuth);
+
+			InputStream inputStream = connection.getInputStream();
+			File targetFile = new File(temporaryPath/* System.getProperty("java.io.tmpdir") */ + File.separator
+					+ FilenameUtils.removeExtension(attachFileName) + ".zip");
+
+			FileUtils.copyInputStreamToFile(inputStream, targetFile);
+
+			File unzippedFile = zip4jUtility.decompressWithPassword(targetFile, originalDocName, attachFileName,
+					originalExtension, encDecPass, temporaryPath);
+
+			permitFileAndFolder(targetFile);
+
+			if (!StringUtils.equalsIgnoreCase(FilenameUtils.getExtension(targetFile.getName()), "zip")) {
+
+				FileUtils.deleteQuietly(targetFile);
+			}
+
+			return unzippedFile;
+
+		} catch (Exception e) {
+			logger.error(e);
+			return null;
+		}
+
+	}
+
+	public String replaceString(Map<String, String> replacers, String fileContent) {
+
+		String[] replacedContent = { fileContent };
+		replacers.forEach((key, val) -> replacedContent[0] = StringUtils.replace(replacedContent[0], key, val));
+		return replacedContent[0];
+
+	}
+
+	// Fileupload
+	public File getProtectedZipFile(MultipartFile multipartFile, String encDecPass, String guid, String tempFilePath)
+			throws Exception {
+
+//			Generate the file with guid name
+		guid = StringUtils.replace(guid, "-", "");
+		File tempFile = new File(tempFilePath + File.separator + guid + "."
+				+ FilenameUtils.getExtension(multipartFile.getOriginalFilename()));
+
+		multipartFile.transferTo(tempFile);
+
+		File zipFile = zip4jUtility.compressWithPassword(tempFile, encDecPass, tempFilePath);
+		permitFileAndFolder(tempFile);
+
+		if (!StringUtils.equalsIgnoreCase(FilenameUtils.getExtension(tempFile.getName()), "zip")) {
+			FileUtils.deleteQuietly(tempFile);
+
+		}
+
+		return zipFile;
+	}
+
+	public static String encodeURIComponent(String s) {
+		try {
+			return URLEncoder.encode(s, StandardCharsets.UTF_8.toString()).replace("+", "%20").replace("%21", "!")
+					.replace("%27", "'").replace("%28", "(").replace("%29", ")").replace("%7E", "~");
+		} catch (Exception e) {
+			return s;
+		}
+	}
+
+	public MultipartFile convertFileToMultipartFile(File file) throws Exception {
+		FileInputStream input = new FileInputStream(file); // NOSONAR
+		String contentType = Files.probeContentType(file.toPath());
+
+		MultipartFile multipartFile = new MockMultipartFile("file", file.getName(), contentType, input); // NOSONAR
+
+		return multipartFile;
+	}
+
+	public String formatPhNumber(String phNumber) {
+
+		if (phNumber == null || phNumber.trim().isEmpty()) {
+			return phNumber;
+		}
+
+		String accountStr = phNumber.replace("-", "").trim();
+
+		Matcher matcher = ACCOUNT_PATTERN.matcher(accountStr);
+
+		if (matcher.matches()) {
+			String formattedAccount = matcher.replaceFirst("$1-$2-$3");
+
+			formattedAccount = formattedAccount.replaceAll("-+$", "");// NOSONAR
+
+			return formattedAccount;
+		}
+
+		return accountStr;
+	}
+
+	/*
+	 * 
+	 * Date: 06-Dec-2022 Method: responseDate Purpose: responseDate method formatted
+	 * date.
+	 *
+	 */
+	// "MM-dd-yyyy hh:mm a"
+	public String responseDateTime(LocalDateTime now, String pattern) {
+		DateTimeFormatter formatter = DateTimeFormatter.ofPattern(pattern);
+		return now.format(formatter);
+
+	}
+
+	public void bindTheHttpServletResponse(Resource resource, HttpServletResponse response) {
+		if (resource != null) {
+
+			response.setContentType("application/pdf");
+
+			response.setHeader("Content-Disposition",
+					String.format("inline; filename=\"%s\"", StringUtils.replace(resource.getFilename(), "%20", " ")));
+
+			try {
+				response.setContentLength((int) resource.getFile().length());
+
+				InputStream inputStream = resource.getInputStream();
+
+				FileCopyUtils.copy(inputStream, response.getOutputStream());
+				IOUtils.close(inputStream);
+				IOUtils.close(response.getOutputStream());
+				permitFileAndFolder(resource.getFile());
+				FileUtils.deleteQuietly(resource.getFile());
+
+			} catch (Exception e) {
+				logger.error("Exception occurred while closing resources or permitting file/folder {}{}",
+						e.getMessage(), e);
+			}
+
+		} else {
+			response.setContentType("application/pdf");
+
+			response.setHeader("Content-Disposition",
+					String.format("inline; fileName=\"" + "Document_Not_Found.pdf" + "\""));
+
+			ClassLoader classLoader = getClass().getClassLoader();
+			InputStream is = classLoader.getResourceAsStream("Document_Not_Found.pdf");
+
+			try {
+				FileCopyUtils.copy(is, response.getOutputStream());
+				IOUtils.close(is);
+				IOUtils.close(response.getOutputStream());
+			} catch (Exception e1) {
+				logger.error("Exception occurred while closing resources or permitting file/folder {}{}",
+						e1.getMessage(), e1);
+			}
+		}
+
+	}
+
+	@SuppressWarnings("unchecked")
+	public boolean downloadPdfForm(Object formData, StringBuilder mainHtml, String formAbbr, String templatePath,
+			List<Form1AphirScheduleResp> scheduleData) {
+
+		logger.info("Request for downloadPdfForm API for form abbreviation: {}", formAbbr);
+		boolean processReturn = false;
+
+		try {
+
+			switch (formAbbr) {
+			case "APHIM":
+			case "APHIA":
+				processReturn = getAPHIMPdfFileDetails((Form1AphirDataResp) formData, mainHtml, templatePath,
+						scheduleData);
+				break;
+			case "RHIDT":
+				processReturn = getRHIDTPdfFileDetails((Form2RHIDTDataResp) formData, mainHtml, templatePath);
+				break;
+			case "RHILT":
+				processReturn = getRHILTPdfFileDetails((Form3RhiltDataResp) formData, mainHtml, templatePath);
+				break;
+			case "PRTHI":
+				processReturn = getPRTHIPdfFileDetails((Form4PrthiDataResp) formData, mainHtml, templatePath);
+				break;
+			case "LAHIT":
+				processReturn = getApplicationTrackingPdfFileDetails((List<ApplicationTrackingDataList>) formData,
+						mainHtml, templatePath);
+				break;
+			case "30DHI":
+				processReturn = get30DHIPdfFileDetails((Form630DhiDataResp) formData, mainHtml, templatePath);
+				break;
+			case "60DHI":
+				processReturn = get760DHIPdfFileDetails((Form760DhiDataResp) formData, mainHtml, templatePath);
+				break;
+			case "HISCP":
+				processReturn = getHISCPPdfFileDetails((Form8HiscpDataResp) formData, mainHtml, templatePath);
+				break;
+			case "EAPP":
+				processReturn = getEAPPPdfFileDetails((Form9EAPPDataResp) formData, mainHtml, templatePath);
+				break;
+			case "HSAPP":
+				processReturn = getHSAPPdfFileDetails((Form10HSAPPDataResp) formData, mainHtml, templatePath);
+				break;
+			default:
+				break;
+
+			}
+		} catch (Exception e) {
+			logger.error("Exception occurred while generation of pdf file related process {}{}", e.getMessage(), e);
+			throw e;
+		}
+		return processReturn;
+
+	}
+
+	public boolean getAPHIMPdfFileDetails(Form1AphirDataResp data, StringBuilder mainHtmlRet, String templatePath,
+			List<Form1AphirScheduleResp> scheduleData) {
+
+		try {
+			String mainHtml = FileUtils.readFileToString(new File(templatePath), StandardCharsets.UTF_8); // NOSONAR
+
+			Map<String, String> replaceMap = new HashMap<>();
+
+			replaceMap.put("{application_submission_date}", StringUtils.defaultString(data.getRequestDate()));
+			replaceMap.put("{student_name}", StringUtils.defaultString(data.getStudentName()));
+			if (data.getStudentId() > 0) {
+				replaceMap.put("{student_id}", StringUtils.defaultString("(" + data.getStudentId().toString() + ")"));
+			} else {
+				replaceMap.put("{student_id}", "");
+			}
+			replaceMap.put("{student_dob}", StringUtils.defaultString(data.getStudentDob()));
+			replaceMap.put("{school_name}", StringUtils.defaultString(data.getStudentSchool()));
+			replaceMap.put("{grade}", StringUtils.defaultString(data.getStudentGrade()));
+			replaceMap.put("{classification}", StringUtils.defaultString(data.getClassification()));
+			replaceMap.put("{parent_name}", StringUtils.defaultString(data.getParentName()));
+			replaceMap.put("{home_phone}", StringUtils.defaultString(data.getHomePhone()));
+			replaceMap.put("{work_phone}", StringUtils.defaultString(data.getWorkPhone()));
+			replaceMap.put("{emergency_phone}", StringUtils.defaultString(data.getEmergencyPhone()));
+			replaceMap.put("{home_address}", StringUtils.defaultString(data.getHomeAddress()));
+			replaceMap.put("{email_address}", StringUtils.defaultString(data.getEmailAddress()));
+			replaceMap.put("{counselor_name}", StringUtils.defaultString(data.getCounselorName()));
+			replaceMap.put("{counselor_phone}", StringUtils.defaultString(data.getCounselorPhone()));
+			replaceMap.put("{nurse_name}", StringUtils.defaultString(data.getNurseName()));
+			replaceMap.put("{nurse_phone}", StringUtils.defaultString(data.getNursePhone()));
+			replaceMap.put("{attendance_last_date}", StringUtils.defaultString(data.getAttendanceLastDate()));
+			replaceMap.put("{reason}", StringUtils.defaultString(data.getReason()));
+			replaceMap.put("{case_notification}", StringUtils.defaultString(data.getCaseNotification()));
+			replaceMap.put("{notification_date}", StringUtils.defaultString(data.getNotificationDate()));
+			replaceMap.put("{parent_signature}", StringUtils.defaultString(data.getParentSignature()));
+			replaceMap.put("{parent_sign_date}", StringUtils.defaultString(data.getParentSignDate()));
+			replaceMap.put("{principal_signature}", StringUtils.defaultString(data.getPrincipalSignature()));
+			replaceMap.put("{principal_sign_date}", StringUtils.defaultString(data.getPrincipalSignDate()));
+			replaceMap.put("{dir_spl_ed_signature}", StringUtils.defaultString(data.getDirSplEdSignature()));
+			replaceMap.put("{dir_spl_ed_sign_date}", StringUtils.defaultString(data.getDirSplEdSignDate()));
+			replaceMap.put("{dir_sup_signature}", StringUtils.defaultString(data.getDirSupSignature()));
+			replaceMap.put("{dir_sup_sign_dtate}", StringUtils.defaultString(data.getDirSupSignDate()));
+			replaceMap.put("{dir_stu_life_service}", StringUtils.defaultString(data.getDirStuLifeService()));
+			replaceMap.put("{dir_stu_life_date}", StringUtils.defaultString(data.getDirStuLifeDate()));
+
+			// ================= Physician =================
+
+			if (!StringUtils.isBlank(data.getPhysicianSignature())) {
+				replaceMap.put("{PHYSICIAN_SIGNATURE_START}", "");
+				replaceMap.put("{PHYSICIAN_SIGNATURE_END}", "");
+				replaceMap.put("{PHYSICIAN_SIGNATURE_BLANK_START}", "<!--");
+				replaceMap.put("{PHYSICIAN_SIGNATURE_BLANK_END}", "-->");
+				replaceMap.put("{physician_sign_date}", StringUtils.defaultString(data.getPhysicianSignDate()));
+
+			} else {
+				replaceMap.put("{PHYSICIAN_SIGNATURE_START}", "<!--");
+				replaceMap.put("{PHYSICIAN_SIGNATURE_END}", "-->");
+				replaceMap.put("{PHYSICIAN_SIGNATURE_BLANK_START}", "");
+				replaceMap.put("{PHYSICIAN_SIGNATURE_BLANK_END}", "");
+				replaceMap.put("{physician_sign_date}", "");
+			}
+
+			// ================= Checkbox Values =================
+
+			// -------- Medical / Non Medical --------
+			if (StringUtils.equalsIgnoreCase(data.getApplicationTypeAbbreviation(), "MI")) {
+
+				// Medical Checked
+				replaceMap.put("{APPLICATION_TYPE_MI_CHECKED_START}", "");
+				replaceMap.put("{APPLICATION_TYPE_MI_CHECKED_END}", "");
+
+				replaceMap.put("{APPLICATION_TYPE_MI_NOTCHECKED_START}", "<!--");
+				replaceMap.put("{APPLICATION_TYPE_MI_NOTCHECKED_END}", "-->");
+
+				// Non Medical Empty
+				replaceMap.put("{APPLICATION_TYPE_AE_CHECKED_START}", "<!--");
+				replaceMap.put("{APPLICATION_TYPE_AE_CHECKED_END}", "-->");
+
+				replaceMap.put("{APPLICATION_TYPE_AE_NOTCHECKED_START}", "");
+				replaceMap.put("{APPLICATION_TYPE_AE_NOTCHECKED_END}", "");
+
+			} else if (StringUtils.equalsIgnoreCase(data.getApplicationTypeAbbreviation(), "AE")) {
+
+				// Medical Empty
+				replaceMap.put("{APPLICATION_TYPE_MI_CHECKED_START}", "<!--");
+				replaceMap.put("{APPLICATION_TYPE_MI_CHECKED_END}", "-->");
+
+				replaceMap.put("{APPLICATION_TYPE_MI_NOTCHECKED_START}", "");
+				replaceMap.put("{APPLICATION_TYPE_MI_NOTCHECKED_END}", "");
+
+				// Non Medical Checked
+				replaceMap.put("{APPLICATION_TYPE_AE_CHECKED_START}", "");
+				replaceMap.put("{APPLICATION_TYPE_AE_CHECKED_END}", "");
+
+				replaceMap.put("{APPLICATION_TYPE_AE_NOTCHECKED_START}", "<!--");
+				replaceMap.put("{APPLICATION_TYPE_AE_NOTCHECKED_END}", "-->");
+			} else {
+
+				// Medical Empty
+				replaceMap.put("{APPLICATION_TYPE_MI_CHECKED_START}", "<!--");
+				replaceMap.put("{APPLICATION_TYPE_MI_CHECKED_END}", "-->");
+
+				replaceMap.put("{APPLICATION_TYPE_MI_NOTCHECKED_START}", "");
+				replaceMap.put("{APPLICATION_TYPE_MI_NOTCHECKED_END}", "");
+
+				// Non Medical Empty
+				replaceMap.put("{APPLICATION_TYPE_AE_CHECKED_START}", "<!--");
+				replaceMap.put("{APPLICATION_TYPE_AE_CHECKED_END}", "-->");
+
+				replaceMap.put("{APPLICATION_TYPE_AE_NOTCHECKED_START}", "");
+				replaceMap.put("{APPLICATION_TYPE_AE_NOTCHECKED_END}", "");
+			}
+
+			// -------- Male / Female --------
+			if (StringUtils.equalsIgnoreCase(data.getStudentGender(), "Male")) {
+
+				replaceMap.put("{STUDENT_GENDER_M_CHECKED_START}", "");
+				replaceMap.put("{STUDENT_GENDER_M_CHECKED_END}", "");
+
+				replaceMap.put("{STUDENT_GENDER_M_NOTCHECKED_START}", "<!--");
+				replaceMap.put("{STUDENT_GENDER_M_NOTCHECKED_END}", "-->");
+
+				replaceMap.put("{STUDENT_GENDER_F_CHECKED_START}", "<!--");
+				replaceMap.put("{STUDENT_GENDER_F_CHECKED_END}", "-->");
+
+				replaceMap.put("{STUDENT_GENDER_F_NOTCHECKED_START}", "");
+				replaceMap.put("{STUDENT_GENDER_F_NOTCHECKED_END}", "");
+
+			} else if (StringUtils.equalsIgnoreCase(data.getStudentGender(), "Female")) {
+
+				replaceMap.put("{STUDENT_GENDER_M_CHECKED_START}", "<!--");
+				replaceMap.put("{STUDENT_GENDER_M_CHECKED_END}", "-->");
+
+				replaceMap.put("{STUDENT_GENDER_M_NOTCHECKED_START}", "");
+				replaceMap.put("{STUDENT_GENDER_M_NOTCHECKED_END}", "");
+
+				replaceMap.put("{STUDENT_GENDER_F_CHECKED_START}", "");
+				replaceMap.put("{STUDENT_GENDER_F_CHECKED_END}", "");
+
+				replaceMap.put("{STUDENT_GENDER_F_NOTCHECKED_START}", "<!--");
+				replaceMap.put("{STUDENT_GENDER_F_NOTCHECKED_END}", "-->");
+			} else {
+				replaceMap.put("{STUDENT_GENDER_M_CHECKED_START}", "<!--");
+				replaceMap.put("{STUDENT_GENDER_M_CHECKED_END}", "-->");
+
+				replaceMap.put("{STUDENT_GENDER_M_NOTCHECKED_START}", "");
+				replaceMap.put("{STUDENT_GENDER_M_NOTCHECKED_END}", "");
+
+				replaceMap.put("{STUDENT_GENDER_F_CHECKED_START}", "<!--");
+				replaceMap.put("{STUDENT_GENDER_F_CHECKED_END}", "-->");
+
+				replaceMap.put("{STUDENT_GENDER_F_NOTCHECKED_START}", "");
+				replaceMap.put("{STUDENT_GENDER_F_NOTCHECKED_END}", "");
+			}
+
+			// -------- Physician Approval --------
+			if (Boolean.FALSE.equals(data.getIsApprove())) {
+
+				// Not Approve checked
+				replaceMap.put("{IS_APPROVE_CHECKED_START}", "<!--");
+				replaceMap.put("{IS_APPROVE_CHECKED_END}", "-->");
+
+				replaceMap.put("{IS_APPROVE_NOTCHECKED_START}", "");
+				replaceMap.put("{IS_APPROVE_NOTCHECKED_END}", "");
+
+				replaceMap.put("{IS_NOT_APPROVE_NOTCHECKED_START}", "<!--");
+				replaceMap.put("{IS_NOT_APPROVE_NOTCHECKED_END}", "-->");
+
+				replaceMap.put("{IS_NOT_APPROVE_CHECKED_START}", "");
+				replaceMap.put("{IS_NOT_APPROVE_CHECKED_END}", "");
+
+				replaceMap.put("{approve_upto_date}", "");
+
+			} else if (Boolean.TRUE.equals(data.getIsApprove())) {
+
+				// Approve checked
+				replaceMap.put("{IS_APPROVE_CHECKED_START}", "");
+				replaceMap.put("{IS_APPROVE_CHECKED_END}", "");
+
+				replaceMap.put("{IS_APPROVE_NOTCHECKED_START}", "<!--");
+				replaceMap.put("{IS_APPROVE_NOTCHECKED_END}", "-->");
+
+				replaceMap.put("{IS_NOT_APPROVE_NOTCHECKED_START}", "");
+				replaceMap.put("{IS_NOT_APPROVE_NOTCHECKED_END}", "");
+
+				replaceMap.put("{IS_NOT_APPROVE_CHECKED_START}", "<!--");
+				replaceMap.put("{IS_NOT_APPROVE_CHECKED_END}", "-->");
+
+				replaceMap.put("{approve_upto_date}", StringUtils.defaultString(data.getApproveUptoDate()));
+
+			} else {
+
+				// Both checkboxes unchecked
+				replaceMap.put("{IS_APPROVE_CHECKED_START}", "<!--");
+				replaceMap.put("{IS_APPROVE_CHECKED_END}", "-->");
+
+				replaceMap.put("{IS_APPROVE_NOTCHECKED_START}", "");
+				replaceMap.put("{IS_APPROVE_NOTCHECKED_END}", "");
+
+				replaceMap.put("{IS_NOT_APPROVE_NOTCHECKED_START}", "");
+				replaceMap.put("{IS_NOT_APPROVE_NOTCHECKED_END}", "");
+
+				replaceMap.put("{IS_NOT_APPROVE_CHECKED_START}", "<!--");
+				replaceMap.put("{IS_NOT_APPROVE_CHECKED_END}", "-->");
+
+				replaceMap.put("{approve_upto_date}", "");
+
+			}
+
+			// ==================== Paths ====================
+			final int scheduleMaxRowCount = 5;// NOSONAR
+
+			List<Form1AphirScheduleResp> updatedAllScheduleList = scheduleData.stream().map(x -> {
+				x.setId(x.getId());
+				return x;
+			}).collect(Collectors.toList());
+
+			List<Form1AphirScheduleResp> leftSchList = updatedAllScheduleList.stream()
+					.filter(x -> "L".equals(x.getScheduleType())).collect(Collectors.toList());
+
+			List<Form1AphirScheduleResp> rightSchList = updatedAllScheduleList.stream()
+					.filter(x -> "R".equals(x.getScheduleType())).collect(Collectors.toList());
+
+			List<Form1AphirScheduleResp> leftScheduleList = generateBlankScheduleList(leftSchList, scheduleMaxRowCount);
+
+			List<Form1AphirScheduleResp> rightScheduleList = generateBlankScheduleList(rightSchList,
+					scheduleMaxRowCount);
+
+			mainHtml = scheduleBodyReplace(mainHtml, leftScheduleList, rightScheduleList);
+
+			mainHtml = this.replaceString(replaceMap, mainHtml);
+
+			mainHtmlRet.append(mainHtml);
+
+			return true;
+
+		} catch (Exception e) {
+			logger.error("Error generating APHIM PDF {}{}", e.getMessage(), e);
+			throw new HomeInstructionException(e.getMessage(), "Internal server error", e);
+		}
+	}
+
+	public boolean getRHIDTPdfFileDetails(Form2RHIDTDataResp data, StringBuilder mainHtmlRet, String templatePath) {
+
+		try {
+
+			String mainHtml = "";
+			mainHtml = FileUtils.readFileToString(new File(templatePath), StandardCharsets.UTF_8);
+
+			Map<String, String> replaceMap = new HashMap<>();
+
+			replaceMap.put("{student_name}", StringUtils.defaultString(data.getStudentName()));
+			if (data.getStudentId() > 0) {
+				replaceMap.put("{student_id}", StringUtils.defaultString("(" + data.getStudentId().toString() + ")"));
+			} else {
+				replaceMap.put("{student_id}", "");
+			}
+			replaceMap.put("{student_dob}", StringUtils.defaultString(data.getStudentDob()));
+
+			replaceMap.put("{school_name}", StringUtils.defaultString(data.getStudentSchool()));
+			replaceMap.put("{physician_review}", StringUtils.defaultString(data.getPhysicianReview()));
+			replaceMap.put("{hi_end_date}", StringUtils.defaultString(data.getHiEndDate()));
+
+			replaceMap.put("{nurse_signature}", StringUtils.defaultString(data.getNurseSignature()));
+			replaceMap.put("{nurse_sign_date}", StringUtils.defaultString(data.getNurseSignDate()));
+
+			// ================= Physician =================
+			if (!StringUtils.isBlank(data.getPhysicianSignDate())) {
+				replaceMap.put("{PHYSICIAN_SIGNATURE_START}", "");
+				replaceMap.put("{PHYSICIAN_SIGNATURE_END}", "");
+				replaceMap.put("{PHYSICIAN_SIGNATURE_BLANK_START}", "<!--");
+				replaceMap.put("{PHYSICIAN_SIGNATURE_BLANK_END}", "-->");
+				replaceMap.put("{physician_sign_date}", StringUtils.defaultString(data.getPhysicianSignDate()));
+			} else {
+				replaceMap.put("{PHYSICIAN_SIGNATURE_START}", "<!--");
+				replaceMap.put("{PHYSICIAN_SIGNATURE_END}", "-->");
+				replaceMap.put("{PHYSICIAN_SIGNATURE_BLANK_START}", "");
+				replaceMap.put("{PHYSICIAN_SIGNATURE_BLANK_END}", "");
+				replaceMap.put("{physician_sign_date}", "");
+			}
+			// Physicain Review
+
+			if (!StringUtils.isBlank(data.getPhysicianReview())) {
+
+				String physicianReview = StringUtils.defaultString(data.getPhysicianReview(), "");
+
+				String[] physicianReviewLines = physicianReview.split("\\r\\n|\\r|\\n", -1);
+
+				StringBuilder formattedPhysicianReview = new StringBuilder();
+
+				for (String line : physicianReviewLines) {
+					formattedPhysicianReview.append(line).append("<div style=\"").append("width:100%;")
+							.append("border-bottom:1px solid black;").append("height:1px;").append("margin-bottom:5px;")
+							.append("\"></div>");
+				}
+				replaceMap.put("{physician_review}", formattedPhysicianReview.toString());
+				replaceMap.put("{PHYSICIAN_REVIEW_NOTBLANK_START}", "");
+				replaceMap.put("{PHYSICIAN_REVIEW_NOTBLANK_END}", "");
+				replaceMap.put("{PHYSICIAN_REVIEW_BLANK_START}", "<!--");
+				replaceMap.put("{PHYSICIAN_REVIEW_BLANK_END}", "-->");
+			} else {
+				replaceMap.put("{physician_review}", "");
+				replaceMap.put("{PHYSICIAN_REVIEW_NOTBLANK_START}", "<!--");
+				replaceMap.put("{PHYSICIAN_REVIEW_NOTBLANK_END}", "-->");
+				replaceMap.put("{PHYSICIAN_REVIEW_BLANK_START}", "");
+				replaceMap.put("{PHYSICIAN_REVIEW_BLANK_END}", "");
+			}
+			// Physician Agree Checkbox
+			if (Boolean.TRUE.equals(data.getIsAgree())) {
+				replaceMap.put("{IS_AGREE_CHECKED_START}", "");
+				replaceMap.put("{IS_AGREE_CHECKED_END}", "");
+				replaceMap.put("{IS_AGREE_CHECKED_START_BLANK}", "<!--");
+				replaceMap.put("{IS_AGREE_CHECKED_END_BLANK}", "-->");
+
+				replaceMap.put("{IS_AGREE_NOTCHECKED_START}", "<!--");
+				replaceMap.put("{IS_AGREE_NOTCHECKED_END}", "-->");
+				replaceMap.put("{IS_AGREE_NOTCHECKED_START_BLANK}", "");
+				replaceMap.put("{IS_AGREE_NOTCHECKED_END_BLANK}", "");
+
+			} else if (Boolean.FALSE.equals(data.getIsAgree())) {
+				replaceMap.put("{IS_AGREE_CHECKED_START}", "<!--");
+				replaceMap.put("{IS_AGREE_CHECKED_END}", "-->");
+				replaceMap.put("{IS_AGREE_CHECKED_START_BLANK}", "");
+				replaceMap.put("{IS_AGREE_CHECKED_END_BLANK}", "");
+
+				replaceMap.put("{IS_AGREE_NOTCHECKED_START}", "");
+				replaceMap.put("{IS_AGREE_NOTCHECKED_END}", "");
+				replaceMap.put("{IS_AGREE_NOTCHECKED_START_BLANK}", "<!--");
+				replaceMap.put("{IS_AGREE_NOTCHECKED_END_BLANK}", "-->");
+			} else {
+				replaceMap.put("{IS_AGREE_CHECKED_START}", "<!--");
+				replaceMap.put("{IS_AGREE_CHECKED_END}", "-->");
+				replaceMap.put("{IS_AGREE_CHECKED_START_BLANK}", "");
+				replaceMap.put("{IS_AGREE_CHECKED_END_BLANK}", "");
+
+				replaceMap.put("{IS_AGREE_NOTCHECKED_START}", "<!--");
+				replaceMap.put("{IS_AGREE_NOTCHECKED_END}", "-->");
+				replaceMap.put("{IS_AGREE_NOTCHECKED_START_BLANK}", "");
+				replaceMap.put("{IS_AGREE_NOTCHECKED_END_BLANK}", "");
+			}
+
+			mainHtml = this.replaceString(replaceMap, mainHtml);
+
+			mainHtmlRet.append(mainHtml);
+
+			return true;
+
+		} catch (Exception e) {
+			logger.error("Error generating RHIDT PDF {}{}", e.getMessage(), e);
+			throw new HomeInstructionException(e.getMessage(), "Internal server error", e);
+		}
+	}
+
+	public boolean getRHILTPdfFileDetails(Form3RhiltDataResp data, StringBuilder mainHtmlRet, String templatePath) {
+
+		try {
+
+			String mainHtml = "";
+			mainHtml = FileUtils.readFileToString(new File(templatePath), StandardCharsets.UTF_8);
+
+			Map<String, String> replaceMap = new HashMap<>();
+
+			// ================= Header =================
+			replaceMap.put("{student_name}", StringUtils.defaultString(data.getStudentName()));
+			if (data.getStudentId() > 0) {
+				replaceMap.put("{student_id}", StringUtils.defaultString("(" + data.getStudentId().toString() + ")"));
+			} else {
+				replaceMap.put("{student_id}", "");
+			}
+
+			replaceMap.put("{school_name}", StringUtils.defaultString(data.getStudentSchool()));
+			replaceMap.put("{grade}", StringUtils.defaultString(data.getStudentGrade()));
+			replaceMap.put("{injury_type}", StringUtils.defaultString(data.getInjuryType()));
+
+			replaceMap.put("{length_of_absence}", StringUtils.defaultString(data.getLengthOfAbsence()));
+			replaceMap.put("{parent_signature}", StringUtils.defaultString(data.getParentSignature()));
+			replaceMap.put("{parent_sign_date}", StringUtils.defaultString(data.getParentSignDate()));
+			replaceMap.put("{received_by}", StringUtils.defaultString(data.getReceivedBy()));
+			replaceMap.put("{nurse_signature}", StringUtils.defaultString(data.getNurseSignature()));
+			replaceMap.put("{nurse_sign_date}", StringUtils.defaultString(data.getNurseSignDate()));
+
+			// ================= Physician =================
+			if (Boolean.TRUE.equals(data.getIsApplicationGiven())) {
+				replaceMap.put("{IS_APPLICATION_GIVEN_Y_CHECKED_START}", "");
+				replaceMap.put("{IS_APPLICATION_GIVEN_Y_CHECKED_END}", "");
+				replaceMap.put("{IS_APPLICATION_GIVEN_Y_NOTCHECKED_START}", "<!--");
+				replaceMap.put("{IS_APPLICATION_GIVEN_Y_NOTCHECKED_END}", "-->");
+
+				replaceMap.put("{IS_APPLICATION_GIVEN_N_CHECKED_START}", "<!--");
+				replaceMap.put("{IS_APPLICATION_GIVEN_N_CHECKED_END}", "-->");
+				replaceMap.put("{IS_APPLICATION_GIVEN_N_NOTCHECKED_START}", "");
+				replaceMap.put("{IS_APPLICATION_GIVEN_N_NOTCHECKED_END}", "");
+
+			} else if (Boolean.FALSE.equals(data.getIsApplicationGiven())) {
+				replaceMap.put("{IS_APPLICATION_GIVEN_Y_CHECKED_START}", "<!--");
+				replaceMap.put("{IS_APPLICATION_GIVEN_Y_CHECKED_END}", "-->");
+				replaceMap.put("{IS_APPLICATION_GIVEN_Y_NOTCHECKED_START}", "");
+				replaceMap.put("{IS_APPLICATION_GIVEN_Y_NOTCHECKED_END}", "");
+
+				replaceMap.put("{IS_APPLICATION_GIVEN_N_CHECKED_START}", "");
+				replaceMap.put("{IS_APPLICATION_GIVEN_N_CHECKED_END}", "");
+				replaceMap.put("{IS_APPLICATION_GIVEN_N_NOTCHECKED_START}", "<!--");
+				replaceMap.put("{IS_APPLICATION_GIVEN_N_NOTCHECKED_END}", "-->");
+			} else {
+				replaceMap.put("{IS_APPLICATION_GIVEN_Y_CHECKED_START}", "<!--");
+				replaceMap.put("{IS_APPLICATION_GIVEN_Y_CHECKED_END}", "-->");
+				replaceMap.put("{IS_APPLICATION_GIVEN_Y_NOTCHECKED_START}", "");
+				replaceMap.put("{IS_APPLICATION_GIVEN_Y_NOTCHECKED_END}", "");
+
+				replaceMap.put("{IS_APPLICATION_GIVEN_N_CHECKED_START}", "<!--");
+				replaceMap.put("{IS_APPLICATION_GIVEN_N_CHECKED_END}", "-->");
+				replaceMap.put("{IS_APPLICATION_GIVEN_N_NOTCHECKED_START}", "");
+				replaceMap.put("{IS_APPLICATION_GIVEN_N_NOTCHECKED_END}", "");
+			}
+
+			mainHtml = this.replaceString(replaceMap, mainHtml);
+
+			mainHtmlRet.append(mainHtml);
+
+			return true;
+
+		} catch (Exception e) {
+			logger.error("Error generating RHILT PDF {}{}", e.getMessage(), e);
+			throw new HomeInstructionException(e.getMessage(), "Internal server error", e);
+		}
+	}
+
+	public List<Form1AphirScheduleResp> generateBlankScheduleList(List<Form1AphirScheduleResp> scheduleList,
+			int maxLength) {
+
+		List<Form1AphirScheduleResp> list = new ArrayList<>(scheduleList);
+
+		while (list.size() < maxLength) {
+
+			Form1AphirScheduleResp schedule = new Form1AphirScheduleResp();
+			schedule.setId(0L);
+			schedule.setForm1APHIRDataId(0L);
+			schedule.setSubject("");
+			schedule.setMp1("");
+			schedule.setMp2("");
+			schedule.setMp3("");
+			schedule.setMp4("");
+
+			list.add(schedule);
+		}
+
+		return list;
+	}
+
+	public String scheduleBodyReplace(String mainHtml, List<Form1AphirScheduleResp> leftScheduleList,
+			List<Form1AphirScheduleResp> rightScheduleList) {
+
+		try {
+
+			String html = mainHtml;
+
+			if (html == null) {
+				return null;
+			}
+
+			String rowTemplate = StringUtils.substringBetween(html, "{ROW_START}", "{ROW_END}");
+
+			StringBuilder scheduleRows = new StringBuilder();
+
+			for (int i = 0; i < 5; i++) {
+
+				Form1AphirScheduleResp left = leftScheduleList.get(i);
+				Form1AphirScheduleResp right = rightScheduleList.get(i);
+
+				Map<String, String> rowReplacers = new HashMap<>();
+
+				rowReplacers.put("{subject_name_mp1_mp2}", StringUtils.defaultString(left.getSubject()));
+				rowReplacers.put("{mp1}", StringUtils.defaultString(left.getMp1()));
+				rowReplacers.put("{mp2}", StringUtils.defaultString(left.getMp2()));
+
+				rowReplacers.put("{subject_name_mp3_mp4}", StringUtils.defaultString(right.getSubject()));
+				rowReplacers.put("{mp3}", StringUtils.defaultString(right.getMp3()));
+				rowReplacers.put("{mp4}", StringUtils.defaultString(right.getMp4()));
+
+				scheduleRows.append(this.replaceString(rowReplacers, rowTemplate));
+			}
+
+			html = html.replace("{ROW_START}" + rowTemplate + "{ROW_END}", scheduleRows.toString());
+
+			return html;
+
+		} catch (Exception e) { // NOSONAR
+			logger.error("Exception occurred while preparing schedule rows.", e);
+			throw new HomeInstructionException(e.getMessage(), "Internal Server Error", e);
+		}
+	}
+
+	public boolean getPRTHIPdfFileDetails(Form4PrthiDataResp data, StringBuilder mainHtmlRet, String templatePath) {
+
+		try {
+
+			String mainHtml = "";
+			mainHtml = FileUtils.readFileToString(new File(templatePath), StandardCharsets.UTF_8);
+
+			Map<String, String> replaceMap = new HashMap<>();
+
+			// ================= Header =================
+			replaceMap.put("{student_name}", StringUtils.defaultString(data.getStudentName()));
+			if (data.getStudentId() > 0) {
+				replaceMap.put("{student_id}", StringUtils.defaultString("(" + data.getStudentId().toString() + ")"));
+			} else {
+				replaceMap.put("{student_id}", "");
+			}
+			replaceMap.put("{student_dob}", StringUtils.defaultString(data.getStudentDob()));
+
+			replaceMap.put("{school_name}", StringUtils.defaultString(data.getStudentSchool()));
+			replaceMap.put("{grade}", StringUtils.defaultString(data.getStudentGrade()));
+
+			replaceMap.put("{teacher_name}", StringUtils.defaultString(data.getTeacherName()));
+			replaceMap.put("{teacher_school}", StringUtils.defaultString(data.getTeacherSchool()));
+			replaceMap.put("{teacher_home_phone}", StringUtils.defaultString(data.getTeacherHomePhone()));
+			replaceMap.put("{teacher_work_phone}", StringUtils.defaultString(data.getTeacherWorkPhone()));
+			replaceMap.put("{teacher_signature}", StringUtils.defaultString(data.getTeacherSignature()));
+			replaceMap.put("{teacher_sign_date}", StringUtils.defaultString(data.getTeacherSignDate()));
+			replaceMap.put("{principal_signature}", StringUtils.defaultString(data.getPrincipalSignature()));
+			replaceMap.put("{principal_sign_date}", StringUtils.defaultString(data.getPrincipalSignDate()));
+
+			if (Boolean.TRUE.equals(data.getIsTeacherAccept())) {
+
+				replaceMap.put("{IS_TEACHER_ACCEPT_CHECKED_START}", "");
+				replaceMap.put("{IS_TEACHER_ACCEPT_CHECKED_END}", "");
+
+				replaceMap.put("{IS_TEACHER_ACCEPT_NOTCHECKED_START}", "<!--");
+				replaceMap.put("{IS_TEACHER_ACCEPT_NOTCHECKED_END}", "-->");
+			} else {
+				replaceMap.put("{IS_TEACHER_ACCEPT_CHECKED_START}", "<!--");
+				replaceMap.put("{IS_TEACHER_ACCEPT_CHECKED_END}", "-->");
+
+				replaceMap.put("{IS_TEACHER_ACCEPT_NOTCHECKED_START}", "");
+				replaceMap.put("{IS_TEACHER_ACCEPT_NOTCHECKED_END}", "");
+			}
+
+			if (Boolean.TRUE.equals(data.getIsTeacherRecommend())) {
+
+				replaceMap.put("{IS_TEACHER_RECOMMEND_CHECKED_START}", "");
+				replaceMap.put("{IS_TEACHER_RECOMMEND_CHECKED_END}", "");
+
+				replaceMap.put("{IS_TEACHER_RECOMMEND_NOTCHECKED_START}", "<!--");
+				replaceMap.put("{IS_TEACHER_RECOMMEND_NOTCHECKED_END}", "-->");
+
+			} else {
+				replaceMap.put("{IS_TEACHER_RECOMMEND_CHECKED_START}", "<!--");
+				replaceMap.put("{IS_TEACHER_RECOMMEND_CHECKED_END}", "-->");
+
+				replaceMap.put("{IS_TEACHER_RECOMMEND_NOTCHECKED_START}", "");
+				replaceMap.put("{IS_TEACHER_RECOMMEND_NOTCHECKED_END}", "");
+			}
+
+			if (Boolean.TRUE.equals(data.getIsTeacherCertified())) {
+
+				replaceMap.put("{IS_TEACHER_CERTIFIED_CHECKED_START}", "");
+				replaceMap.put("{IS_TEACHER_CERTIFIED_CHECKED_END}", "");
+
+				replaceMap.put("{IS_TEACHER_CERTIFIED_NOTCHECKED_START}", "<!--");
+				replaceMap.put("{IS_TEACHER_CERTIFIED_NOTCHECKED_END}", "-->");
+
+				replaceMap.put("{teacher_area_1}", StringUtils.defaultString(data.getTeacherArea1()));
+				replaceMap.put("{teacher_area_2}", StringUtils.defaultString(data.getTeacherArea2()));
+				replaceMap.put("{teacher_area_3}", StringUtils.defaultString(data.getTeacherArea3()));
+				replaceMap.put("{teacher_area_4}", StringUtils.defaultString(data.getTeacherArea4()));
+			} else {
+				replaceMap.put("{IS_TEACHER_CERTIFIED_CHECKED_START}", "<!--");
+				replaceMap.put("{IS_TEACHER_CERTIFIED_CHECKED_END}", "-->");
+
+				replaceMap.put("{IS_TEACHER_CERTIFIED_NOTCHECKED_START}", "");
+				replaceMap.put("{IS_TEACHER_CERTIFIED_NOTCHECKED_END}", "");
+
+				replaceMap.put("{teacher_area_1}", "");
+				replaceMap.put("{teacher_area_2}", "");
+				replaceMap.put("{teacher_area_3}", "");
+				replaceMap.put("{teacher_area_4}", "");
+			}
+
+			mainHtml = this.replaceString(replaceMap, mainHtml);
+
+			mainHtmlRet.append(mainHtml);
+
+			return true;
+
+		} catch (Exception e) {
+			logger.error("Error generating PRTHI PDF {}{}", e.getMessage(), e);
+			throw new HomeInstructionException(e.getMessage(), "Internal server error", e);
+		}
+	}
+
+	public boolean get30DHIPdfFileDetails(Form630DhiDataResp data, StringBuilder mainHtmlRet, String templatePath) {
+
+		try {
+
+			String mainHtml = "";
+			mainHtml = FileUtils.readFileToString(new File(templatePath), StandardCharsets.UTF_8);
+
+			Map<String, String> replaceMap = new HashMap<>();
+			// ================= Header =================
+			replaceMap.put("{nurse_name}", StringUtils.defaultString(data.getNurseName(), ""));
+			replaceMap.put("{student_name}", StringUtils.defaultString(data.getStudentName(), ""));
+			if (data.getStudentId() > 0) {
+				replaceMap.put("{student_id}", StringUtils.defaultString("(" + data.getStudentId().toString() + ")"));
+			} else {
+				replaceMap.put("{student_id}", "");
+			}
+
+			replaceMap.put("{grade}", StringUtils.defaultString(data.getStudentGrade(), ""));
+			replaceMap.put("{notice_date}", StringUtils.defaultString(data.getNoticeDate(), ""));
+			replaceMap.put("{physician_name}", StringUtils.defaultString(data.getPhysicianName(), ""));
+
+			replaceMap.put("{physician_verified_on}", StringUtils.defaultString(data.getPhysicianVerifiedOn(), ""));
+
+			mainHtml = this.replaceString(replaceMap, mainHtml);
+			mainHtmlRet.append(mainHtml);
+
+			return true;
+
+		} catch (Exception e) {
+			logger.error("Error generating PDF 30DHI -{}{}", e.getMessage(), e);
+			throw new HomeInstructionException(e.getMessage(), "Internal server error", e);
+		}
+	}
+
+	public boolean get760DHIPdfFileDetails(Form760DhiDataResp data, StringBuilder mainHtmlRet, String templatePath) {
+
+		try {
+
+			String mainHtml = "";
+
+			mainHtml = FileUtils.readFileToString(new File(templatePath), StandardCharsets.UTF_8);
+
+			Map<String, String> replaceMap = new HashMap<>();
+			// ================= Header =================
+			replaceMap.put("{nurse_name}", StringUtils.defaultString(data.getNurseName(), ""));
+			replaceMap.put("{student_name}", StringUtils.defaultString(data.getStudentName(), ""));
+			if (data.getStudentId() > 0) {
+				replaceMap.put("{student_id}", StringUtils.defaultString("(" + data.getStudentId().toString() + ")"));
+			} else {
+				replaceMap.put("{student_id}", "");
+			}
+
+			replaceMap.put("{grade}", StringUtils.defaultString(data.getStudentGrade(), ""));
+			replaceMap.put("{notice_date}", StringUtils.defaultString(data.getNoticeDate(), ""));
+			replaceMap.put("{physician_name}", StringUtils.defaultString(data.getPhysicianName(), ""));
+
+			replaceMap.put("{physician_verified_on}", StringUtils.defaultString(data.getPhysicianVerifiedOn(), ""));
+
+			mainHtml = this.replaceString(replaceMap, mainHtml);
+
+			mainHtmlRet.append(mainHtml);
+
+			return true;
+
+		} catch (Exception e) {
+			logger.error("Error generating PDF - {}{}", e.getMessage(), e);
+			throw new HomeInstructionException(e.getMessage(), "Internal server error", e);
+		}
+	}
+
+	public boolean getHISCPPdfFileDetails(Form8HiscpDataResp data, StringBuilder mainHtmlRet, String templatePath) {// NOSONAR
+
+		try {
+
+			String mainHtml = "";
+			mainHtml = FileUtils.readFileToString(new File(templatePath), StandardCharsets.UTF_8);
+
+			Map<String, String> replaceMap = new HashMap<>();
+			// ================= Header =================
+			replaceMap.put("{student_name}", StringUtils.defaultString(data.getStudentName(), ""));
+			if (data.getStudentId() > 0) {
+				replaceMap.put("{student_id}", StringUtils.defaultString("(" + data.getStudentId().toString() + ")"));
+			} else {
+				replaceMap.put("{student_id}", "");
+			}
+			replaceMap.put("{grade}", StringUtils.defaultString(data.getStudentGrade(), ""));
+			replaceMap.put("{school_name}", StringUtils.defaultString(data.getStudentSchool(), ""));
+			replaceMap.put("{medical_cutoff_date}", StringUtils.defaultString(data.getMedicalCutoffDate(), ""));
+
+			replaceMap.put("{nurse_signature}", StringUtils.defaultString(data.getNurseSignature(), ""));
+			replaceMap.put("{nurse_sign_date}", StringUtils.defaultString(data.getNurseSignDate(), ""));
+
+			replaceMap.put("{primary_language}", StringUtils.defaultString(data.getPrimaryLanguage(), ""));
+			replaceMap.put("{last_present_date}", StringUtils.defaultString(data.getLastPresentDate(), ""));
+			replaceMap.put("{number_of_day_missing}", StringUtils.defaultString(data.getNumberOfDayMissing(), ""));
+			replaceMap.put("{hours_of_instruction}", StringUtils.defaultString(data.getHoursOfInstruction(), ""));
+			replaceMap.put("{academic_level}", StringUtils.defaultString(data.getAcademicLevel(), ""));
+
+			replaceMap.put("{counsellor_signature}", StringUtils.defaultString(data.getCounsellorSignature(), ""));
+			replaceMap.put("{counsellor_sign_date}", StringUtils.defaultString(data.getCounsellorSignDate(), ""));
+
+			// Checkboxes Start
+
+			if (StringUtils.equalsIgnoreCase(data.getReason(), "Injury")) {// NOSONAR
+				replaceMap.put("{REASON_INJ_CHECKED_START}", "");
+				replaceMap.put("{REASON_INJ_CHECKED_END}", "");
+				replaceMap.put("{REASON_INJ_NOTCHECKED_START}", "<!--");
+				replaceMap.put("{REASON_INJ_NOTCHECKED_END}", "-->");
+
+			} else {// NOSONAR
+				replaceMap.put("{REASON_INJ_CHECKED_START}", "<!--");
+				replaceMap.put("{REASON_INJ_CHECKED_END}", "-->");
+				replaceMap.put("{REASON_INJ_NOTCHECKED_START}", "");
+				replaceMap.put("{REASON_INJ_NOTCHECKED_END}", "");
+			}
+
+			if (StringUtils.equalsIgnoreCase(data.getReason(), "Illness")) {// NOSONAR
+				replaceMap.put("{REASON_ILL_CHECKED_START}", "");
+				replaceMap.put("{REASON_ILL_CHECKED_END}", "");
+				replaceMap.put("{REASON_ILL_NOTCHECKED_START}", "<!--");
+				replaceMap.put("{REASON_ILL_NOTCHECKED_END}", "-->");
+			} else {// NOSONAR
+				replaceMap.put("{REASON_ILL_CHECKED_START}", "<!--");
+				replaceMap.put("{REASON_ILL_CHECKED_END}", "-->");
+				replaceMap.put("{REASON_ILL_NOTCHECKED_START}", "");
+				replaceMap.put("{REASON_ILL_NOTCHECKED_END}", "");
+			}
+
+			if (StringUtils.equalsIgnoreCase(data.getReason(), "Behavior")) {// NOSONAR
+				replaceMap.put("{REASON_BHV_CHECKED_START}", "");
+				replaceMap.put("{REASON_BHV_CHECKED_END}", "");
+				replaceMap.put("{REASON_BHV_NOTCHECKED_START}", "<!--");
+				replaceMap.put("{REASON_BHV_NOTCHECKED_END}", "-->");
+			} else {// NOSONAR
+				replaceMap.put("{REASON_BHV_CHECKED_START}", "<!--");
+				replaceMap.put("{REASON_BHV_CHECKED_END}", "-->");
+				replaceMap.put("{REASON_BHV_NOTCHECKED_START}", "");
+				replaceMap.put("{REASON_BHV_NOTCHECKED_END}", "");
+			}
+
+			if (StringUtils.isBlank(data.getReason())) {// NOSONAR
+
+				replaceMap.put("{REASON_INJ_CHECKED_START}", "<!--");
+				replaceMap.put("{REASON_INJ_CHECKED_END}", "-->");
+				replaceMap.put("{REASON_INJ_NOTCHECKED_START}", "");
+				replaceMap.put("{REASON_INJ_NOTCHECKED_END}", "");
+
+				replaceMap.put("{REASON_ILL_CHECKED_START}", "<!--");
+				replaceMap.put("{REASON_ILL_CHECKED_END}", "-->");
+				replaceMap.put("{REASON_ILL_NOTCHECKED_START}", "");
+				replaceMap.put("{REASON_ILL_NOTCHECKED_END}", "");
+
+				replaceMap.put("{REASON_BHV_CHECKED_START}", "<!--");
+				replaceMap.put("{REASON_BHV_CHECKED_END}", "-->");
+				replaceMap.put("{REASON_BHV_NOTCHECKED_START}", "");
+				replaceMap.put("{REASON_BHV_NOTCHECKED_END}", "");
+			}
+
+			if (Boolean.TRUE.equals(data.getIsPhysicalLimitation())) {// NOSONAR
+				replaceMap.put("{IS_PHYSICAL_LIMITATION_Y_CHECKED_START}", "");
+				replaceMap.put("{IS_PHYSICAL_LIMITATION_Y_CHECKED_END}", "");
+				replaceMap.put("{IS_PHYSICAL_LIMITATION_Y_NOTCHECKED_START}", "<!--");
+				replaceMap.put("{IS_PHYSICAL_LIMITATION_Y_NOTCHECKED_END}", "-->");
+
+				replaceMap.put("{IS_PHYSICAL_LIMITATION_N_CHECKED_START}", "<!--");
+				replaceMap.put("{IS_PHYSICAL_LIMITATION_N_CHECKED_END}", "-->");
+				replaceMap.put("{IS_PHYSICAL_LIMITATION_N_NOTCHECKED_START}", "");
+				replaceMap.put("{IS_PHYSICAL_LIMITATION_N_NOTCHECKED_END}", "");
+
+				String comments = StringUtils.defaultString(data.getNurseComments(), "");
+
+				String[] commentLines = comments.split("\\r\\n|\\r|\\n", -1);
+
+				StringBuilder formattedComments = new StringBuilder();
+
+				for (String line : commentLines) {
+					formattedComments.append(line).append("<div style=\"").append("width:100%;")
+							.append("border-bottom:1px solid black;").append("height:1px;").append("margin-bottom:5px;")
+							.append("\"></div>");
+				}
+
+				replaceMap.put("{comments}", formattedComments.toString());
+
+				replaceMap.put("{COMMENTS_NOTBLANK_START}", "");
+				replaceMap.put("{COMMENTS_NOTBLANK_END}", "");
+				replaceMap.put("{COMMENTS_BLANK_START}", "<!--");
+				replaceMap.put("{COMMENTS_BLANK_END}", "-->");
+
+			} else if (Boolean.FALSE.equals(data.getIsPhysicalLimitation())) {
+				replaceMap.put("{IS_PHYSICAL_LIMITATION_Y_CHECKED_START}", "<!--");
+				replaceMap.put("{IS_PHYSICAL_LIMITATION_Y_CHECKED_END}", "-->");
+				replaceMap.put("{IS_PHYSICAL_LIMITATION_Y_NOTCHECKED_START}", "");
+				replaceMap.put("{IS_PHYSICAL_LIMITATION_Y_NOTCHECKED_END}", "");
+
+				replaceMap.put("{IS_PHYSICAL_LIMITATION_N_CHECKED_START}", "");
+				replaceMap.put("{IS_PHYSICAL_LIMITATION_N_CHECKED_END}", "");
+				replaceMap.put("{IS_PHYSICAL_LIMITATION_N_NOTCHECKED_START}", "<!--");
+				replaceMap.put("{IS_PHYSICAL_LIMITATION_N_NOTCHECKED_END}", "-->");
+
+				replaceMap.put("{comments}", StringUtils.defaultString(""));
+				replaceMap.put("{COMMENTS_NOTBLANK_START}", "<!--");
+				replaceMap.put("{COMMENTS_NOTBLANK_END}", "-->");
+				replaceMap.put("{COMMENTS_BLANK_START}", "");
+				replaceMap.put("{COMMENTS_BLANK_END}", "");
+			} else {// NOSONAR
+				replaceMap.put("{IS_PHYSICAL_LIMITATION_Y_CHECKED_START}", "<!--");
+				replaceMap.put("{IS_PHYSICAL_LIMITATION_Y_CHECKED_END}", "-->");
+				replaceMap.put("{IS_PHYSICAL_LIMITATION_Y_NOTCHECKED_START}", "");
+				replaceMap.put("{IS_PHYSICAL_LIMITATION_Y_NOTCHECKED_END}", "");
+
+				replaceMap.put("{IS_PHYSICAL_LIMITATION_N_CHECKED_START}", "<!--");
+				replaceMap.put("{IS_PHYSICAL_LIMITATION_N_CHECKED_END}", "-->");
+				replaceMap.put("{IS_PHYSICAL_LIMITATION_N_NOTCHECKED_START}", "");
+				replaceMap.put("{IS_PHYSICAL_LIMITATION_N_NOTCHECKED_END}", "");
+
+				replaceMap.put("{comments}", StringUtils.defaultString(""));
+				replaceMap.put("{COMMENTS_NOTBLANK_START}", "<!--");
+				replaceMap.put("{COMMENTS_NOTBLANK_END}", "-->");
+				replaceMap.put("{COMMENTS_BLANK_START}", "");
+				replaceMap.put("{COMMENTS_BLANK_END}", "");
+			}
+
+			if (StringUtils.contains(data.getProgram(), "GENED")) {// NOSONAR
+				replaceMap.put("{PROGRAM_GENED_CHECKED_START}", "");
+				replaceMap.put("{PROGRAM_GENED_CHECKED_END}", "");
+				replaceMap.put("{PROGRAM_GENED_NOTCHECKED_START}", "<!--");
+				replaceMap.put("{PROGRAM_GENED_NOTCHECKED_END}", "-->");
+			} else {// NOSONAR
+				replaceMap.put("{PROGRAM_GENED_CHECKED_START}", "<!--");
+				replaceMap.put("{PROGRAM_GENED_CHECKED_END}", "-->");
+				replaceMap.put("{PROGRAM_GENED_NOTCHECKED_START}", "");
+				replaceMap.put("{PROGRAM_GENED_NOTCHECKED_END}", "");
+			}
+
+			if (StringUtils.contains(data.getProgram(), "SPED")) {// NOSONAR
+				replaceMap.put("{PROGRAM_SPED_CHECKED_START}", "");
+				replaceMap.put("{PROGRAM_SPED_CHECKED_END}", "");
+				replaceMap.put("{PROGRAM_SPED_NOTCHECKED_START}", "<!--");
+				replaceMap.put("{PROGRAM_SPED_NOTCHECKED_END}", "-->");
+			} else {// NOSONAR
+				replaceMap.put("{PROGRAM_SPED_CHECKED_START}", "<!--");
+				replaceMap.put("{PROGRAM_SPED_CHECKED_END}", "-->");
+				replaceMap.put("{PROGRAM_SPED_NOTCHECKED_START}", "");
+				replaceMap.put("{PROGRAM_SPED_NOTCHECKED_END}", "");
+			}
+
+			if (StringUtils.contains(data.getProgram(), "ESL")) {// NOSONAR
+				replaceMap.put("{PROGRAM_ESL_CHECKED_START}", "");
+				replaceMap.put("{PROGRAM_ESL_CHECKED_END}", "");
+				replaceMap.put("{PROGRAM_ESL_NOTCHECKED_START}", "<!--");
+				replaceMap.put("{PROGRAM_ESL_NOTCHECKED_END}", "-->");
+			} else {// NOSONAR
+				replaceMap.put("{PROGRAM_ESL_CHECKED_START}", "<!--");
+				replaceMap.put("{PROGRAM_ESL_CHECKED_END}", "-->");
+				replaceMap.put("{PROGRAM_ESL_NOTCHECKED_START}", "");
+				replaceMap.put("{PROGRAM_ESL_NOTCHECKED_END}", "");
+			}
+
+			if (StringUtils.contains(data.getProgram(), "ELL")) {// NOSONAR
+				replaceMap.put("{PROGRAM_ELL_CHECKED_START}", "");
+				replaceMap.put("{PROGRAM_ELL_CHECKED_END}", "");
+				replaceMap.put("{PROGRAM_ELL_NOTCHECKED_START}", "<!--");
+				replaceMap.put("{PROGRAM_ELL_NOTCHECKED_END}", "-->");
+			} else {// NOSONAR
+				replaceMap.put("{PROGRAM_ELL_CHECKED_START}", "<!--");
+				replaceMap.put("{PROGRAM_ELL_CHECKED_END}", "-->");
+				replaceMap.put("{PROGRAM_ELL_NOTCHECKED_START}", "");
+				replaceMap.put("{PROGRAM_ELL_NOTCHECKED_END}", "");
+			}
+
+			if (StringUtils.contains(data.getProgram(), "504")) {// NOSONAR
+				replaceMap.put("{PROGRAM_504_CHECKED_START}", "");
+				replaceMap.put("{PROGRAM_504_CHECKED_END}", "");
+				replaceMap.put("{PROGRAM_504_NOTCHECKED_START}", "<!--");
+				replaceMap.put("{PROGRAM_504_NOTCHECKED_END}", "-->");
+			} else {// NOSONAR
+				replaceMap.put("{PROGRAM_504_CHECKED_START}", "<!--");
+				replaceMap.put("{PROGRAM_504_CHECKED_END}", "-->");
+				replaceMap.put("{PROGRAM_504_NOTCHECKED_START}", "");
+				replaceMap.put("{PROGRAM_504_NOTCHECKED_END}", "");
+			}
+
+			if (StringUtils.isBlank(data.getStudentHistory())) {// NOSONAR
+
+				replaceMap.put("{STUDENT_HISTORY_NOTBLANK_START}", "<!--");
+				replaceMap.put("{STUDENT_HISTORY_NOTBLANK_END}", "-->");
+				replaceMap.put("{STUDENT_HISTORY_BLANK_START}", "");
+				replaceMap.put("{STUDENT_HISTORY_BLANK_END}", "");
+				replaceMap.put("{student_history}", "");
+
+			} else {// NOSONAR
+
+				replaceMap.put("{STUDENT_HISTORY_NOTBLANK_START}", "");
+				replaceMap.put("{STUDENT_HISTORY_NOTBLANK_END}", "");
+				replaceMap.put("{STUDENT_HISTORY_BLANK_START}", "<!--");
+				replaceMap.put("{STUDENT_HISTORY_BLANK_END}", "-->");
+
+				String studentHistory = StringUtils.defaultString(data.getStudentHistory(), "");
+
+				String[] historyLines = studentHistory.split("\\r\\n|\\r|\\n", -1);
+
+				StringBuilder formattedHistory = new StringBuilder();
+
+				for (String line : historyLines) {
+					formattedHistory.append("<div style=\"").append("width: 100%; ")
+							.append("border-bottom: 1px solid black; ").append("line-height: 24px; ")
+							.append("min-height: 24px;").append("\">").append(line).append("</div>");
+				}
+
+				replaceMap.put("{student_history}", formattedHistory.toString());
+			}
+			mainHtml = this.replaceString(replaceMap, mainHtml);
+
+			mainHtmlRet.append(mainHtml);
+
+			return true;
+
+		} catch (Exception e) {// NOSONAR
+			logger.error("Error generating RHILT PDF {}{}", e.getMessage(), e);
+			throw new HomeInstructionException(e.getMessage(), "Internal server error", e);
+		}
+	}
+
+	public boolean getEAPPPdfFileDetails(Form9EAPPDataResp data, StringBuilder mainHtmlRet, String templatePath) {
+
+		try {
+
+			String mainHtml = "";
+			mainHtml = FileUtils.readFileToString(new File(templatePath), StandardCharsets.UTF_8);
+
+			Map<String, String> replaceMap = new HashMap<>();
+
+			// ================= Header =================
+			replaceMap.put("{student_name}", StringUtils.defaultString(data.getStudentName(), ""));
+			if (data.getStudentId() > 0) {
+				replaceMap.put("{student_id}", StringUtils.defaultString("(" + data.getStudentId().toString() + ")"));
+			} else {
+				replaceMap.put("{student_id}", "");
+			}
+			replaceMap.put("{school_name}", StringUtils.defaultString(data.getStudentSchool(), ""));
+			replaceMap.put("{teacher_name}", StringUtils.defaultString(data.getTeacherName(), ""));
+			replaceMap.put("{teacher_email}", StringUtils.defaultString(data.getTeacherEmail(), ""));
+			replaceMap.put("{teacher_signature}", StringUtils.defaultString(data.getTeacherSignature(), ""));
+			replaceMap.put("{teacher_sign_date}", StringUtils.defaultString(data.getTeacherSignDate(), ""));
+
+			mainHtml = tableBodyReplace(mainHtml, data.getForm9EappPlanData());
+			mainHtml = this.replaceString(replaceMap, mainHtml);
+
+			mainHtmlRet.append(mainHtml);
+
+			return true;
+
+		} catch (Exception e) {
+			logger.error("Error generating EAPP PDF {}{}", e.getMessage(), e);
+			throw new HomeInstructionException(e.getMessage(), "Internal server error", e);
+		}
+	}
+
+	public String tableBodyReplace(String mainHtml, List<Form9EAPPPlanDataResp> planDataList) {
+
+		try {
+			String html = mainHtml;
+
+			if (html == null) {
+				return null;
+			}
+
+			String rowTemplate = StringUtils.substringBetween(html, "{ROW_START}", "{ROW_END}");
+
+			StringBuilder scheduleRows = new StringBuilder();
+
+			if (html != null && planDataList != null && !planDataList.isEmpty()) {
+
+				for (Form9EAPPPlanDataResp tableData : planDataList) {
+
+					Map<String, String> rowReplacers = new HashMap<>();
+
+					rowReplacers.put("{plan_type}", StringUtils.defaultString(tableData.getPlanType(), ""));
+					rowReplacers.put("{plan_1}", StringUtils.defaultString(tableData.getPlan1(), ""));
+					rowReplacers.put("{plan_2}", StringUtils.defaultString(tableData.getPlan2(), ""));
+
+					scheduleRows.append(this.replaceString(rowReplacers, rowTemplate));
+				}
+			}
+
+			html = html.replace("{ROW_START}" + rowTemplate + "{ROW_END}", scheduleRows.toString());
+
+			return html;
+
+		} catch (Exception e) { // NOSONAR
+			logger.error("Exception occured while fetching data:{}{}", e.getMessage(), e);
+			throw new HomeInstructionException(e.getMessage(), Constant.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	public boolean getHSAPPdfFileDetails(Form10HSAPPDataResp data, StringBuilder mainHtmlRet, String templatePath) {
+
+		try {
+
+			String mainHtml = "";
+			mainHtml = FileUtils.readFileToString(new File(templatePath), StandardCharsets.UTF_8);
+
+			Map<String, String> replaceMap = new HashMap<>();
+			// ================= Header =================
+			replaceMap.put("{student_name}", StringUtils.defaultString(data.getStudentName(), ""));
+			if (data.getStudentId() > 0) {
+				replaceMap.put("{student_id}", StringUtils.defaultString("(" + data.getStudentId().toString() + ")"));
+			} else {
+				replaceMap.put("{student_id}", "");
+			}
+			replaceMap.put("{school_name}", StringUtils.defaultString(data.getStudentSchool(), ""));
+			replaceMap.put("{subject}", StringUtils.defaultString(data.getSubject(), ""));
+			replaceMap.put("{grade_in_progress}", StringUtils.defaultString(data.getGradeInProgress(), ""));
+			replaceMap.put("{teacher_name}", StringUtils.defaultString(data.getTeacherName(), ""));
+			replaceMap.put("{teacher_email}", StringUtils.defaultString(data.getTeacherEmail(), ""));
+
+			replaceMap.put("{unit_of_study}", StringUtils.defaultString(data.getUnityOfStudy(), ""));
+			replaceMap.put("{assignments}", StringUtils.defaultString(data.getAssignments(), ""));
+			replaceMap.put("{independent_work}", StringUtils.defaultString(data.getIndependentWork(), ""));
+			replaceMap.put("{assessments}", StringUtils.defaultString(data.getAssessments(), ""));
+			replaceMap.put("{standards_covered}", StringUtils.defaultString(data.getStandardsCovered(), ""));
+			replaceMap.put("{other_resources}", StringUtils.defaultString(data.getOtherResources(), ""));
+
+			replaceMap.put("{teacher_signature}", StringUtils.defaultString(data.getTeacherSignature(), ""));
+			replaceMap.put("{teacher_sign_date}", StringUtils.defaultString(data.getTeacherSignDate(), ""));
+
+			if (Boolean.TRUE.equals(data.getIsAdditionalTimeNeeded())) {
+				replaceMap.put("{IS_ADDITIONAL_TIME_NEEDED_CHECKED_START}", "");
+				replaceMap.put("{IS_ADDITIONAL_TIME_NEEDED_CHECKED_END}", "");
+				replaceMap.put("{IS_ADDITIONAL_TIME_NEEDED_NOTCHECKED_START}", "<!--");
+				replaceMap.put("{IS_ADDITIONAL_TIME_NEEDED_NOTCHECKED_END}", "-->");
+			} else {
+				replaceMap.put("{IS_ADDITIONAL_TIME_NEEDED_CHECKED_START}", "<!--");
+				replaceMap.put("{IS_ADDITIONAL_TIME_NEEDED_CHECKED_END}", "-->");
+				replaceMap.put("{IS_ADDITIONAL_TIME_NEEDED_NOTCHECKED_START}", "");
+				replaceMap.put("{IS_ADDITIONAL_TIME_NEEDED_NOTCHECKED_END}", "");
+			}
+
+			mainHtml = this.replaceString(replaceMap, mainHtml);
+			mainHtmlRet.append(mainHtml);
+
+			return true;
+
+		} catch (Exception e) {
+			logger.error("Error generating PDF for HSAPP {}{}", e.getMessage(), e);
+			throw new HomeInstructionException(e.getMessage(), "Internal server error", e);
+		}
+	}
+
+	public boolean getApplicationTrackingPdfFileDetails(List<ApplicationTrackingDataList> dataList,
+			StringBuilder mainHtmlRet, String templatePath) {
+
+		try {
+
+			String mainHtml = "";
+			mainHtml = FileUtils.readFileToString(new File(templatePath), StandardCharsets.UTF_8);
+
+			String rowTemplate = StringUtils.substringBetween(mainHtml, "{STR_APPLICATION_LIST}",
+					"{END_APPLICATION_LIST}");
+
+			StringBuilder scheduleRows = new StringBuilder();
+			int totalRows = 17;
+
+			if (dataList.size() > totalRows) {
+				totalRows = dataList.size();
+			}
+
+			if (mainHtml != null && !CollectionUtils.isEmpty(dataList)) {
+
+				for (int i = 0; i < totalRows; i++) {
+
+					ApplicationTrackingDataList schedule = (dataList != null && i < dataList.size()) ? dataList.get(i)
+							: new ApplicationTrackingDataList();
+
+					Map<String, String> rowReplacers = new HashMap<>();
+
+					rowReplacers.put("{DATE_VERIFY_SCHL}",
+							StringUtils.defaultString(schedule.getVerificationDate(), ""));
+					rowReplacers.put("{student_name}", StringUtils.defaultString(schedule.getStudentName(), ""));
+					rowReplacers.put("{CST_NOTICE_30}", StringUtils.defaultString(schedule.getNoticeDate30Day(), ""));
+					rowReplacers.put("{CST_NOTICE_60}", StringUtils.defaultString(schedule.getNoticeDate60Day(), ""));
+					rowReplacers.put("{ACT_TAKEN_CST}", StringUtils.defaultString(schedule.getCstAction(), ""));
+					rowReplacers.put("{STDNT_RETURN_SCHL}", StringUtils.defaultString(schedule.getReturnDate(), ""));
+
+					scheduleRows.append(replaceString(rowReplacers, rowTemplate));
+				}
+			}
+
+			mainHtml = mainHtml.replace("{STR_APPLICATION_LIST}" + rowTemplate + "{END_APPLICATION_LIST}", // NOSONAR
+					scheduleRows.toString()); // NOSONAR
+			mainHtmlRet.append(mainHtml);
+
+			return true;
+
+		} catch (Exception e) {
+			logger.error("Error generating PDF", e);
+			throw new HomeInstructionException(e.getMessage(), "Internal server error", e);
+		}
+	}
+}

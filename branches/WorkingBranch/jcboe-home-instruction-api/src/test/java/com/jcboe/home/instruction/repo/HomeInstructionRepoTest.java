@@ -1,0 +1,2114 @@
+package com.jcboe.home.instruction.repo;
+
+import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.mockito.ArgumentMatchers;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.Mockito;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.dao.DataAccessException;
+import org.springframework.jdbc.core.RowMapper;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+
+import com.jcboe.home.instruction.model.request.ApplicationTrackingDataList;
+import com.jcboe.home.instruction.model.request.ApplicationTrackingRequest;
+import com.jcboe.home.instruction.model.request.Form10Request;
+import com.jcboe.home.instruction.model.request.Form1Request;
+import com.jcboe.home.instruction.model.request.Form2Request;
+import com.jcboe.home.instruction.model.request.Form3Request;
+import com.jcboe.home.instruction.model.request.Form4Request;
+import com.jcboe.home.instruction.model.request.Form630DHIRequest;
+import com.jcboe.home.instruction.model.request.Form760DHIRequest;
+import com.jcboe.home.instruction.model.request.Form8Request;
+import com.jcboe.home.instruction.model.request.Form9Request;
+import com.jcboe.home.instruction.model.request.GetStudentInfoReqById;
+import com.jcboe.home.instruction.response.ApplicationInfoResp;
+import com.jcboe.home.instruction.response.ApplicationList;
+import com.jcboe.home.instruction.response.Form10HSAPPDataResp;
+import com.jcboe.home.instruction.response.Form1AphirDataResp;
+import com.jcboe.home.instruction.response.Form1AphirScheduleResp;
+import com.jcboe.home.instruction.response.Form2RHIDTDataResp;
+import com.jcboe.home.instruction.response.Form3RhiltDataResp;
+import com.jcboe.home.instruction.response.Form4PrthiDataResp;
+import com.jcboe.home.instruction.response.Form630DhiDataResp;
+import com.jcboe.home.instruction.response.Form760DhiDataResp;
+import com.jcboe.home.instruction.response.Form8HiscpDataResp;
+import com.jcboe.home.instruction.response.Form9EAPPDataResp;
+import com.jcboe.home.instruction.response.Form9EAPPPlanDataResp;
+import com.jcboe.home.instruction.response.GetApplicationTrackingResp;
+import com.jcboe.home.instruction.response.GetPhysicianInfoResp;
+import com.jcboe.home.instruction.response.HIFormMasterResp;
+import com.jcboe.home.instruction.response.HIFormTransactionResp;
+import com.jcboe.home.instruction.response.NotificationDetailsResp;
+import com.jcboe.home.instruction.response.NotificationList;
+import com.jcboe.home.instruction.response.StudentDataResp;
+import com.jcboe.home.instruction.utilities.AES;
+import com.jcboe.home.instruction.utilities.Constant;
+import com.jcboe.home.instruction.utilities.Utility;
+
+@SpringBootTest
+class HomeInstructionRepoTest {
+
+	@MockBean
+	private NamedParameterJdbcTemplate jdbcTemplate;
+
+	@MockBean
+	private UserDetailsRepo userDetailsRepo;
+
+	@InjectMocks
+	private HomeInstructionRepo formRepo;
+
+	@Mock
+	private AppConfigRepo appConfigRepo;
+
+	@MockBean
+	private Utility utility;
+
+	@BeforeEach
+	void setUp() {
+		formRepo = new HomeInstructionRepo(jdbcTemplate, utility);
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testGetStudentData() throws SQLException {
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<StudentDataResp>>any())).thenAnswer((invocation) -> {
+
+					RowMapper<StudentDataResp> rowMapper = (RowMapper<StudentDataResp>) invocation.getArgument(2);
+					ResultSet rs = Mockito.mock(ResultSet.class);
+
+					Mockito.when(rs.getLong(ArgumentMatchers.eq("submitted_form_id"))).thenReturn(506L);
+
+					List<StudentDataResp> users = new ArrayList<StudentDataResp>();
+					users.add(rowMapper.mapRow(rs, 0));
+					return users;
+				});
+
+		appConfigRepo.getStudentData("56L", null);
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testGetStudentDataExcp() throws SQLException {
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<StudentDataResp>>any())).thenThrow(new DataAccessException(null) {
+					private static final long serialVersionUID = 1L;
+				});
+
+		appConfigRepo.getStudentData("56L", null);
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testGetStudentInfoDataByStudentId() throws Exception {
+		GetStudentInfoReqById req = new GetStudentInfoReqById();
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<StudentDataResp>>any())).thenAnswer((invocation) -> {
+
+					RowMapper<StudentDataResp> rowMapper = (RowMapper<StudentDataResp>) invocation.getArgument(2);
+					ResultSet rs = Mockito.mock(ResultSet.class);
+
+					Mockito.when(rs.getLong(ArgumentMatchers.eq("submitted_form_id"))).thenReturn(506L);
+
+					List<StudentDataResp> users = new ArrayList<StudentDataResp>();
+					users.add(rowMapper.mapRow(rs, 0));
+					return users;
+				});
+
+		appConfigRepo.getStudentData("", null);
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testGetStudentInfoDataByStudentIdExcp() throws Exception {
+		GetStudentInfoReqById req = new GetStudentInfoReqById();
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<StudentDataResp>>any())).thenThrow(new DataAccessException(null) {
+					private static final long serialVersionUID = 1L;
+				});
+
+		appConfigRepo.getStudentData("", null);
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testUpdateForm2RHIDTdata_Success() throws Exception {
+
+		Form2Request req = new Form2Request();
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<Long>>any())).thenAnswer((invocation) -> {
+
+					RowMapper<Long> rowMapper = (RowMapper<Long>) invocation.getArgument(2);
+					ResultSet rs = Mockito.mock(ResultSet.class);
+
+					Mockito.when(rs.getLong(ArgumentMatchers.eq("submitted_form_id"))).thenReturn(506L);
+
+					List<Long> users = new ArrayList<Long>();
+					users.add(rowMapper.mapRow(rs, 0));
+					return users;
+				});
+
+		formRepo.updateForm2RHIDTdata(req);
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testUpdateForm2RHIDTdata_elseBranches() throws Exception {
+		Form2Request form2Request = new Form2Request();
+		form2Request.setLoggedInUserId("0f06KVmiMuG/nQrPJpnrxg==");
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<Long>>any())).thenAnswer((invocation) -> {
+
+					RowMapper<Long> rowMapper = (RowMapper<Long>) invocation.getArgument(2);
+					ResultSet rs = Mockito.mock(ResultSet.class);
+
+					Mockito.when(rs.getBoolean("is_valid")).thenReturn(true);
+					Mockito.when(rs.getInt("result_code")).thenReturn(0);
+					Mockito.when(rs.getLong("logged_in_user_id")).thenReturn(1L);
+					Mockito.when(rs.getString("logged_in_user_name")).thenReturn("John Doe");
+					Mockito.when(rs.getString("email_id")).thenReturn("john@example.com");
+
+					List<Long> users = new ArrayList<Long>();
+					users.add(rowMapper.mapRow(rs, 0));
+					return users;
+				});
+
+		formRepo.updateForm2RHIDTdata(form2Request);
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testUpdateForm2RHIDTdata_Exception() throws Exception {
+
+		Form2Request req = new Form2Request();
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<Long>>any())).thenThrow(new DataAccessException(null) {
+					private static final long serialVersionUID = 1L;
+				});
+
+		formRepo.updateForm2RHIDTdata(req);
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testUpdateForm3RHILTdata_Success() throws Exception {
+
+		Form3Request request = new Form3Request();
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<Long>>any())).thenAnswer((invocation) -> {
+
+					RowMapper<Long> rowMapper = (RowMapper<Long>) invocation.getArgument(2);
+					ResultSet rs = Mockito.mock(ResultSet.class);
+
+					Mockito.when(rs.getString(ArgumentMatchers.eq("form_short_name"))).thenReturn("506");
+
+					List<Long> users = new ArrayList<Long>();
+					users.add(rowMapper.mapRow(rs, 0));
+					return users;
+				});
+
+		formRepo.updateForm3RHILTdata(request);
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testUpdateForm3RHILTdata_elseBranches() throws Exception {
+		Form3Request form3Request = new Form3Request();
+		form3Request.setLoggedInUserId("0f06KVmiMuG/nQrPJpnrxg==");
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<Long>>any())).thenAnswer((invocation) -> {
+
+					RowMapper<Long> rowMapper = (RowMapper<Long>) invocation.getArgument(2);
+					ResultSet rs = Mockito.mock(ResultSet.class);
+
+					Mockito.when(rs.getBoolean("is_valid")).thenReturn(true);
+					Mockito.when(rs.getInt("result_code")).thenReturn(0);
+					Mockito.when(rs.getLong("logged_in_user_id")).thenReturn(1L);
+					Mockito.when(rs.getString("logged_in_user_name")).thenReturn("John Doe");
+					Mockito.when(rs.getString("email_id")).thenReturn("john@example.com");
+
+					List<Long> users = new ArrayList<Long>();
+					users.add(rowMapper.mapRow(rs, 0));
+					return users;
+				});
+
+		formRepo.updateForm3RHILTdata(form3Request);
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testUpdateForm3RHILTdata_Exception() throws Exception {
+
+		Form3Request request = new Form3Request();
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<Long>>any())).thenThrow(new DataAccessException(null) {
+					private static final long serialVersionUID = 1L;
+				});
+
+		formRepo.updateForm3RHILTdata(request);
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testUpdateForm10HSAPPdata() throws Exception {
+
+		Form10Request request = new Form10Request();
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<Long>>any())).thenAnswer((invocation) -> {
+
+					RowMapper<Long> rowMapper = (RowMapper<Long>) invocation.getArgument(2);
+					ResultSet rs = Mockito.mock(ResultSet.class);
+
+					Mockito.when(rs.getString(ArgumentMatchers.eq("form_short_name"))).thenReturn("506");
+
+					List<Long> users = new ArrayList<Long>();
+					users.add(rowMapper.mapRow(rs, 0));
+					return users;
+				});
+
+		formRepo.updateForm10HSAPPdata(request);
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testUpdateForm10HSAPPdata_elseBranches() throws Exception {
+		Form10Request form10Request = new Form10Request();
+		form10Request.setLoggedInUserId("0f06KVmiMuG/nQrPJpnrxg==");
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<Long>>any())).thenAnswer((invocation) -> {
+
+					RowMapper<Long> rowMapper = (RowMapper<Long>) invocation.getArgument(2);
+					ResultSet rs = Mockito.mock(ResultSet.class);
+
+					Mockito.when(rs.getBoolean("is_valid")).thenReturn(true);
+					Mockito.when(rs.getInt("result_code")).thenReturn(0);
+					Mockito.when(rs.getLong("logged_in_user_id")).thenReturn(1L);
+					Mockito.when(rs.getString("logged_in_user_name")).thenReturn("John Doe");
+					Mockito.when(rs.getString("email_id")).thenReturn("john@example.com");
+
+					List<Long> users = new ArrayList<Long>();
+					users.add(rowMapper.mapRow(rs, 0));
+					return users;
+				});
+
+		formRepo.updateForm10HSAPPdata(form10Request);
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testUpdateForm10HSAPPdata_Exception() throws Exception {
+
+		Form10Request request = new Form10Request();
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<Long>>any())).thenThrow(new DataAccessException(null) {
+					private static final long serialVersionUID = 1L;
+				});
+
+		formRepo.updateForm10HSAPPdata(request);
+	}
+
+	@Test
+	void testGetForm10HSAPPData() {
+
+		Form10HSAPPDataResp dto = new Form10HSAPPDataResp();
+
+		List<Form10HSAPPDataResp> expected = Arrays.asList(dto);
+
+		when(jdbcTemplate.query(anyString(), any(Map.class), ArgumentMatchers.<RowMapper<Form10HSAPPDataResp>>any()))
+				.thenReturn(expected);
+
+		List<Form10HSAPPDataResp> response = formRepo.getForm10HSAPPData(1L, 1l);
+
+		assertNotNull(response);
+		assertEquals(1, response.size());
+		assertEquals(dto, response.get(0));
+
+		verify(jdbcTemplate).query(anyString(), any(Map.class), ArgumentMatchers.<RowMapper<Form10HSAPPDataResp>>any());
+	}
+
+	@Test
+	void testGetForm10HSAPPData_Exception() {
+
+		when(jdbcTemplate.query(anyString(), any(Map.class), ArgumentMatchers.<RowMapper<Form10HSAPPDataResp>>any()))
+				.thenThrow(new RuntimeException("Database Error"));
+
+		List<Form10HSAPPDataResp> response = formRepo.getForm10HSAPPData(1L,1l);
+
+		assertNotNull(response);
+		assertTrue(response.isEmpty());
+
+		verify(jdbcTemplate).query(anyString(), any(Map.class), ArgumentMatchers.<RowMapper<Form10HSAPPDataResp>>any());
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testgetForm9EAPPData() throws SQLException {
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<Form9EAPPDataResp>>any())).thenAnswer((invocation) -> {
+
+					RowMapper<Form9EAPPDataResp> rowMapper = (RowMapper<Form9EAPPDataResp>) invocation.getArgument(2);
+					ResultSet rs = Mockito.mock(ResultSet.class);
+
+					Mockito.when(rs.getString(ArgumentMatchers.eq("form_short_name"))).thenReturn("506");
+
+					List<Form9EAPPDataResp> users = new ArrayList<Form9EAPPDataResp>();
+					users.add(rowMapper.mapRow(rs, 0));
+					return users;
+				});
+
+		formRepo.getForm9EAPPData(98L, 1l);
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testgetForm9EAPPDataExcp() throws SQLException {
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<Form9EAPPDataResp>>any())).thenThrow(new DataAccessException(null) {
+					private static final long serialVersionUID = 1L;
+				});
+
+		formRepo.getForm9EAPPData(98L, 1l);
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testgetForm9EAPPPlanData() throws SQLException {
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<Form9EAPPPlanDataResp>>any())).thenAnswer((invocation) -> {
+
+					RowMapper<Form9EAPPPlanDataResp> rowMapper = (RowMapper<Form9EAPPPlanDataResp>) invocation
+							.getArgument(2);
+					ResultSet rs = Mockito.mock(ResultSet.class);
+
+					Mockito.when(rs.getString(ArgumentMatchers.eq("form_short_name"))).thenReturn("506");
+
+					List<Form9EAPPPlanDataResp> users = new ArrayList<Form9EAPPPlanDataResp>();
+					users.add(rowMapper.mapRow(rs, 0));
+					return users;
+				});
+
+		formRepo.getForm9EAPPPlanData(98L);
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testgetForm9EAPPPlanDataExcp() throws SQLException {
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<Form9EAPPPlanDataResp>>any())).thenThrow(new DataAccessException(null) {
+					private static final long serialVersionUID = 1L;
+				});
+
+		formRepo.getForm9EAPPPlanData(98L);
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testUpdateForm9EAPPData_Success() throws Exception {
+
+		Form9Request form9ERequest = new Form9Request();
+
+		form9ERequest.setIndicator("Y");
+		form9ERequest.setId(1L);
+		form9ERequest.setApplicationId(100L);
+		form9ERequest.setTeacherName("John Smith");
+		form9ERequest.setTeacherEmail("john@test.com");
+		form9ERequest.setTeacherSignature("signature");
+		form9ERequest.setTeacherSignDate(new String());
+		form9ERequest.setForm9EappPlanData(new ArrayList<>());
+		form9ERequest.setLoggedInUserId("");
+
+		// Mock XML conversion
+		Mockito.when(utility.stringToXmlFormat(Mockito.any())).thenReturn("ArrayList<item>test</item>");
+
+		// Mock database call
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<Long>>any())).thenAnswer(invocation -> {
+
+					RowMapper<Long> rowMapper = (RowMapper<Long>) invocation.getArgument(2);
+
+					ResultSet rs = Mockito.mock(ResultSet.class);
+
+					Mockito.when(rs.getLong("tag_id")).thenReturn(123L);
+
+					List<Long> result = new ArrayList<>();
+					result.add(rowMapper.mapRow(rs, 0));
+
+					return result;
+				});
+
+		List<Long> response = formRepo.updateForm9EAPPData(form9ERequest);
+
+		assertNotNull(response);
+		assertEquals(1, response.size());
+		assertEquals(123L, response.get(0));
+
+		// Capture params
+		ArgumentCaptor<Map<String, Object>> paramsCaptor = ArgumentCaptor.forClass(Map.class);
+
+		Mockito.verify(jdbcTemplate).query(Mockito.anyString(), paramsCaptor.capture(),
+				ArgumentMatchers.<RowMapper<Long>>any());
+
+		Map<String, Object> params = paramsCaptor.getValue();
+
+		assertEquals("Y", params.get("p_indicator"));
+		assertEquals(1L, params.get("p_id"));
+		assertEquals(100L, params.get("p_hi_application_id"));
+		assertEquals(0, params.get("p_hi_form_transaction_id"));
+
+		assertEquals("John Smith", params.get("p_teacher_name"));
+		assertEquals("john@test.com", params.get("p_teacher_email"));
+		assertEquals("signature", params.get("p_teacher_signature"));
+		assertEquals(form9ERequest.getTeacherSignDate(), params.get("p_teacher_sign_date"));
+
+		// Empty logged-in user -> if branch
+		assertEquals(0, params.get("p_logged_in_user"));
+
+		// Verify XML transformation
+		assertEquals("Form9EappPlans<Form9EappPlan>test</Form9EappPlan>", params.get("p_form9_eapp_plan_xml_string"));
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testUpdateForm9EAPPData_JdbcException() throws Exception {
+
+		Form9Request form9ERequest = new Form9Request();
+
+		form9ERequest.setIndicator("Y");
+		form9ERequest.setId(1L);
+		form9ERequest.setApplicationId(100L);
+		form9ERequest.setTeacherName("John Smith");
+		form9ERequest.setTeacherEmail("john@test.com");
+		form9ERequest.setTeacherSignature("signature");
+		form9ERequest.setTeacherSignDate(new String());
+		form9ERequest.setForm9EappPlanData(new ArrayList<>());
+		form9ERequest.setLoggedInUserId("");
+
+		Mockito.when(utility.stringToXmlFormat(Mockito.any())).thenReturn("ArrayList<item>test</item>");
+
+		DataAccessException databaseException = new DataAccessException("Database error") {
+			private static final long serialVersionUID = 1L;
+		};
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<Long>>any())).thenThrow(databaseException);
+
+		Exception exception = assertThrows(Exception.class, () -> {
+			formRepo.updateForm9EAPPData(form9ERequest);
+		});
+
+		// Because production code uses "throw e"
+		assertSame(databaseException, exception);
+
+		Mockito.verify(jdbcTemplate).query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<Long>>any());
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testUpdateForm9EAPPData_elseBranches() throws Exception {
+		Form9Request form9ERequest = new Form9Request();
+		form9ERequest.setLoggedInUserId("0f06KVmiMuG/nQrPJpnrxg==");
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<Long>>any())).thenAnswer((invocation) -> {
+
+					RowMapper<Long> rowMapper = (RowMapper<Long>) invocation.getArgument(2);
+					ResultSet rs = Mockito.mock(ResultSet.class);
+
+					Mockito.when(rs.getBoolean("is_valid")).thenReturn(true);
+					Mockito.when(rs.getInt("result_code")).thenReturn(0);
+					Mockito.when(rs.getLong("logged_in_user_id")).thenReturn(1L);
+					Mockito.when(rs.getString("logged_in_user_name")).thenReturn("John Doe");
+					Mockito.when(rs.getString("email_id")).thenReturn("john@example.com");
+
+					List<Long> users = new ArrayList<Long>();
+					users.add(rowMapper.mapRow(rs, 0));
+					return users;
+				});
+
+		formRepo.updateForm9EAPPData(form9ERequest);
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testUpdateForm30DHIdata_Success() throws Exception {
+
+		Form630DHIRequest form630DHIRequest = new Form630DHIRequest();
+		form630DHIRequest.setIndicator("Y");
+		form630DHIRequest.setId(1L);
+		form630DHIRequest.setApplicationId(100L);
+		form630DHIRequest.setNurseName("Test Nurse");
+		form630DHIRequest.setNoticeDate(new String());
+
+		// loggedInUserId empty -> covers p_logged_in_user = 0
+		form630DHIRequest.setLoggedInUserId("");
+
+		GetPhysicianInfoResp physicianInfo = new GetPhysicianInfoResp();
+		physicianInfo.setPhysicianName("Dr. John Smith");
+		physicianInfo.setPhysicianSignDate(new String());
+
+		List<GetPhysicianInfoResp> physcData = new ArrayList<>();
+		physcData.add(physicianInfo);
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<Long>>any())).thenAnswer(invocation -> {
+
+					RowMapper<Long> rowMapper = (RowMapper<Long>) invocation.getArgument(2);
+
+					ResultSet rs = Mockito.mock(ResultSet.class);
+
+					Mockito.when(rs.getLong("tag_id")).thenReturn(123L);
+
+					List<Long> result = new ArrayList<>();
+					result.add(rowMapper.mapRow(rs, 0));
+
+					return result;
+				});
+
+		List<Long> response = formRepo.updateForm30DHIdata(form630DHIRequest, physcData);
+
+		assertNotNull(response);
+		assertEquals(1, response.size());
+		assertEquals(123L, response.get(0));
+
+		// Verify JDBC was called and capture params
+		ArgumentCaptor<Map<String, Object>> paramsCaptor = ArgumentCaptor.forClass(Map.class);
+
+		Mockito.verify(jdbcTemplate).query(Mockito.anyString(), paramsCaptor.capture(),
+				ArgumentMatchers.<RowMapper<Long>>any());
+
+		Map<String, Object> params = paramsCaptor.getValue();
+
+		assertEquals("Y", params.get("p_indicator"));
+		assertEquals(1L, params.get("p_id"));
+		assertEquals(100L, params.get("p_hi_application_id"));
+		assertEquals(0, params.get("p_hi_form_transaction_id"));
+		assertEquals("Test Nurse", params.get("p_nurse_name"));
+
+		// These are the lines you specifically want to cover
+		assertEquals("Dr. John Smith", params.get("p_physician_name"));
+		assertEquals(physicianInfo.getPhysicianSignDate(), params.get("p_physician_verified_on"));
+
+		// Empty logged-in user
+		assertEquals(0, params.get("p_logged_in_user"));
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testUpdateForm30DHIdata_WithLoggedInUser() throws Exception {
+
+		Form630DHIRequest form630DHIRequest = new Form630DHIRequest();
+		form630DHIRequest.setIndicator("Y");
+		form630DHIRequest.setId(1L);
+		form630DHIRequest.setApplicationId(100L);
+		form630DHIRequest.setNurseName("Test Nurse");
+		form630DHIRequest.setNoticeDate(new String());
+
+		// Use a valid encrypted value appropriate for your AES implementation
+		form630DHIRequest.setLoggedInUserId(AES.encrypt("12345", Constant.SALT_AES));
+
+		GetPhysicianInfoResp physicianInfo = new GetPhysicianInfoResp();
+		physicianInfo.setPhysicianName("Dr. John Smith");
+		physicianInfo.setPhysicianSignDate(new String());
+
+		List<GetPhysicianInfoResp> physcData = new ArrayList<>();
+		physcData.add(physicianInfo);
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<Long>>any())).thenAnswer(invocation -> {
+
+					RowMapper<Long> rowMapper = (RowMapper<Long>) invocation.getArgument(2);
+
+					ResultSet rs = Mockito.mock(ResultSet.class);
+					Mockito.when(rs.getLong("tag_id")).thenReturn(123L);
+
+					return Arrays.asList(rowMapper.mapRow(rs, 0));
+				});
+
+		List<Long> response = formRepo.updateForm30DHIdata(form630DHIRequest, physcData);
+
+		assertNotNull(response);
+		assertEquals(123L, response.get(0));
+
+		ArgumentCaptor<Map<String, Object>> paramsCaptor = ArgumentCaptor.forClass(Map.class);
+
+		Mockito.verify(jdbcTemplate).query(Mockito.anyString(), paramsCaptor.capture(),
+				ArgumentMatchers.<RowMapper<Long>>any());
+
+		Map<String, Object> params = paramsCaptor.getValue();
+
+		assertEquals("Dr. John Smith", params.get("p_physician_name"));
+		assertEquals(physicianInfo.getPhysicianSignDate(), params.get("p_physician_verified_on"));
+
+		// Verify decrypted user ID
+		assertEquals("12345", String.valueOf(params.get("p_logged_in_user")));
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testUpdateForm30DHIdata_Exception() throws Exception {
+
+		Form630DHIRequest form630DHIRequest = new Form630DHIRequest();
+		form630DHIRequest.setIndicator("Y");
+		form630DHIRequest.setId(1L);
+		form630DHIRequest.setApplicationId(100L);
+		form630DHIRequest.setNurseName("Test Nurse");
+		form630DHIRequest.setNoticeDate(new String());
+		form630DHIRequest.setLoggedInUserId("");
+
+		// IMPORTANT: Add physician data so execution reaches jdbcTemplate.query()
+		GetPhysicianInfoResp physicianInfo = new GetPhysicianInfoResp();
+		physicianInfo.setPhysicianName("Dr. John Smith");
+		physicianInfo.setPhysicianSignDate(new String());
+
+		List<GetPhysicianInfoResp> physcData = new ArrayList<>();
+		physcData.add(physicianInfo);
+
+		// Make jdbcTemplate.query() throw exception
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<Long>>any())).thenThrow(new DataAccessException("Database error") {
+					private static final long serialVersionUID = 1L;
+				});
+
+		// Your method catches DataAccessException and throws new Exception(e)
+		Exception exception = assertThrows(Exception.class, () -> {
+			formRepo.updateForm30DHIdata(form630DHIRequest, physcData);
+		});
+
+		assertNotNull(exception);
+
+		// Verify original exception is wrapped
+		assertTrue(exception.getCause() instanceof DataAccessException);
+
+		// Verify jdbcTemplate.query() was actually called
+		Mockito.verify(jdbcTemplate).query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<Long>>any());
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testgetForm10HSAPPData() throws SQLException {
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<Form10HSAPPDataResp>>any())).thenAnswer((invocation) -> {
+
+					RowMapper<Form10HSAPPDataResp> rowMapper = (RowMapper<Form10HSAPPDataResp>) invocation
+							.getArgument(2);
+					ResultSet rs = Mockito.mock(ResultSet.class);
+
+					Mockito.when(rs.getString(ArgumentMatchers.eq("form_short_name"))).thenReturn("506");
+
+					List<Form10HSAPPDataResp> users = new ArrayList<Form10HSAPPDataResp>();
+					users.add(rowMapper.mapRow(rs, 0));
+					return users;
+				});
+
+		formRepo.getForm10HSAPPData(98L, 1l);
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testgetForm10HSAPPDataExcp() throws SQLException {
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<Form10HSAPPDataResp>>any())).thenThrow(new DataAccessException(null) {
+					private static final long serialVersionUID = 1L;
+				});
+
+		formRepo.getForm10HSAPPData(98L, 1l);
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testUpdateForm1APHIRdata_Success() throws Exception {
+
+		Form1Request form1Request = new Form1Request();
+
+		form1Request.setIndicator("Y");
+		form1Request.setForm1AphirDataId(1L);
+		form1Request.setApplicationId(100L);
+
+		form1Request.setParentName("John Smith");
+		form1Request.setHomePhone("1111111111");
+		form1Request.setWorkPhone("2222222222");
+		form1Request.setEmergencyPhone("3333333333");
+		form1Request.setHomeAddress("123 Main Street");
+		form1Request.setEmailAddress("john@test.com");
+
+		form1Request.setCounselorName("Counselor");
+		form1Request.setCounselorPhone("4444444444");
+		form1Request.setNurseName("Nurse");
+		form1Request.setNursePhone("5555555555");
+
+		form1Request.setAttendanceLastDate(new String());
+		form1Request.setReason("Test reason");
+		form1Request.setCaseNotification("Y");
+		form1Request.setNotificationDate(new String());
+
+		form1Request.setParentSignature("Parent Signature");
+		form1Request.setParentSignDate(new String());
+
+		form1Request.setPrincipalSignature("Principal Signature");
+		form1Request.setPrincipalSignDate(new String());
+
+		form1Request.setDirSpecialEdSignature("Special Ed Signature");
+		form1Request.setDirSpecialEdSignDate(new String());
+
+		form1Request.setDirSupSignature("Supervisor Signature");
+		form1Request.setDirSupSignDate(new String());
+
+		form1Request.setDirStudentLifeService("Student Life Service");
+		form1Request.setDirStudentLifeDate(new String());
+
+		form1Request.setApproved(true);
+		form1Request.setApprovedUptoDate(new String());
+
+		form1Request.setPhysicianSignature("Physician Signature");
+		form1Request.setPhysicianSignDate(new String());
+
+		form1Request.setForm1AphirScheduleData(new ArrayList<>());
+
+		// Covers the IF branch
+		form1Request.setLoggedInUserId("");
+
+		// Mock XML conversion
+		Mockito.when(utility.stringToXmlFormat(Mockito.any())).thenReturn("ArrayList<item>test</item>");
+
+		// Mock JDBC
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<Long>>any())).thenAnswer(invocation -> {
+
+					RowMapper<Long> rowMapper = (RowMapper<Long>) invocation.getArgument(2);
+
+					ResultSet rs = Mockito.mock(ResultSet.class);
+
+					Mockito.when(rs.getLong("tag_id")).thenReturn(123L);
+
+					List<Long> result = new ArrayList<>();
+					result.add(rowMapper.mapRow(rs, 0));
+
+					return result;
+				});
+
+		List<Long> response = formRepo.updateForm1APHIRdata(form1Request);
+
+		assertNotNull(response);
+		assertEquals(1, response.size());
+		assertEquals(123L, response.get(0));
+
+		// Capture parameters passed to JDBC
+		ArgumentCaptor<Map<String, Object>> paramsCaptor = ArgumentCaptor.forClass(Map.class);
+
+		Mockito.verify(jdbcTemplate).query(Mockito.anyString(), paramsCaptor.capture(),
+				ArgumentMatchers.<RowMapper<Long>>any());
+
+		Map<String, Object> params = paramsCaptor.getValue();
+
+		// Verify parameters
+		assertEquals("Y", params.get("p_indicator"));
+		assertEquals(1L, params.get("p_id"));
+		assertEquals(100L, params.get("p_hi_application_id"));
+		assertEquals(0, params.get("p_hi_form_transaction_id"));
+
+		assertEquals("John Smith", params.get("p_parent_name"));
+		assertEquals("1111111111", params.get("p_home_phone"));
+		assertEquals("2222222222", params.get("p_work_phone"));
+		assertEquals("3333333333", params.get("p_emergency_phone"));
+		assertEquals("123 Main Street", params.get("p_home_address"));
+		assertEquals("john@test.com", params.get("p_email_address"));
+
+		assertEquals("Counselor", params.get("p_counselor_name"));
+		assertEquals("4444444444", params.get("p_counselor_phone"));
+		assertEquals("Nurse", params.get("p_nurse_name"));
+		assertEquals("5555555555", params.get("p_nurse_phone"));
+
+		assertEquals(form1Request.getAttendanceLastDate(), params.get("p_attendance_last_date"));
+
+		assertEquals("Test reason", params.get("p_reason"));
+		assertEquals("Y", params.get("p_case_notification"));
+
+		assertEquals(form1Request.getNotificationDate(), params.get("p_notification_date"));
+
+		assertEquals("Parent Signature", params.get("p_parent_signature"));
+
+		assertEquals(form1Request.getParentSignDate(), params.get("p_parent_sign_date"));
+
+		assertEquals("Principal Signature", params.get("p_principal_signature"));
+
+		assertEquals(form1Request.getPrincipalSignDate(), params.get("p_principal_sign_date"));
+
+		assertEquals("Special Ed Signature", params.get("p_dir_spl_ed_signature"));
+
+		assertEquals(form1Request.getDirSpecialEdSignDate(), params.get("p_dir_spl_ed_sign_date"));
+
+		assertEquals("Supervisor Signature", params.get("p_dir_sup_signature"));
+
+		assertEquals(form1Request.getDirSupSignDate(), params.get("p_dir_sup_sign_date"));
+
+		assertEquals("Student Life Service", params.get("p_dir_stu_life_service"));
+
+		assertEquals(form1Request.getDirStudentLifeDate(), params.get("p_dir_stu_life_date"));
+
+		assertEquals(true, params.get("p_is_approve"));
+
+		assertEquals(form1Request.getApprovedUptoDate(), params.get("p_approve_upto_date"));
+
+		assertEquals("Physician Signature", params.get("p_physician_signature"));
+
+		assertEquals(form1Request.getPhysicianSignDate(), params.get("p_physician_sign_date"));
+
+		// Verify XML replacement
+		assertEquals("Form1AphirSchedules<Form1AphirSchedule>test</Form1AphirSchedule>",
+				params.get("p_form1_aphir_schedule_xml_string"));
+
+		// Empty logged-in user -> IF branch
+		assertEquals(0, params.get("p_logged_in_user"));
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testUpdateForm1APHIRdata_WithLoggedInUser() throws Exception {
+
+		Form1Request form1Request = new Form1Request();
+
+		form1Request.setIndicator("Y");
+		form1Request.setForm1AphirDataId(1L);
+		form1Request.setApplicationId(100L);
+
+		form1Request.setForm1AphirScheduleData(new ArrayList<>());
+
+		// Put a valid encrypted value for your AES implementation
+		form1Request.setLoggedInUserId(AES.encrypt("12345", Constant.SALT_AES));
+
+		Mockito.when(utility.stringToXmlFormat(Mockito.any())).thenReturn("ArrayList<item>test</item>");
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<Long>>any())).thenAnswer(invocation -> {
+
+					RowMapper<Long> rowMapper = (RowMapper<Long>) invocation.getArgument(2);
+
+					ResultSet rs = Mockito.mock(ResultSet.class);
+
+					Mockito.when(rs.getLong("tag_id")).thenReturn(123L);
+
+					return Arrays.asList(rowMapper.mapRow(rs, 0));
+				});
+
+		List<Long> response = formRepo.updateForm1APHIRdata(form1Request);
+
+		assertNotNull(response);
+		assertEquals(123L, response.get(0));
+
+		ArgumentCaptor<Map<String, Object>> paramsCaptor = ArgumentCaptor.forClass(Map.class);
+
+		Mockito.verify(jdbcTemplate).query(Mockito.anyString(), paramsCaptor.capture(),
+				ArgumentMatchers.<RowMapper<Long>>any());
+
+		Map<String, Object> params = paramsCaptor.getValue();
+
+		// Covers the ELSE branch
+		assertEquals("12345", String.valueOf(params.get("p_logged_in_user")));
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testUpdateForm1APHIRdata_Exception() throws Exception {
+
+		Form1Request form1Request = new Form1Request();
+
+		form1Request.setIndicator("Y");
+		form1Request.setForm1AphirDataId(1L);
+		form1Request.setApplicationId(100L);
+
+		form1Request.setParentName("John Smith");
+		form1Request.setHomePhone("1111111111");
+		form1Request.setForm1AphirScheduleData(new ArrayList<>());
+
+		form1Request.setLoggedInUserId("");
+
+		// XML conversion must succeed so execution reaches jdbcTemplate.query()
+		Mockito.when(utility.stringToXmlFormat(Mockito.any())).thenReturn("ArrayList<item>test</item>");
+
+		DataAccessException databaseException = new DataAccessException("Database error") {
+			private static final long serialVersionUID = 1L;
+		};
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<Long>>any())).thenThrow(databaseException);
+
+		// Production code does:
+		// throw new Exception(e)
+		Exception exception = assertThrows(Exception.class, () -> {
+			formRepo.updateForm1APHIRdata(form1Request);
+		});
+
+		assertNotNull(exception);
+
+		// Verify the original exception is wrapped
+		assertSame(databaseException, exception.getCause());
+
+		// Verify JDBC was actually reached
+		Mockito.verify(jdbcTemplate).query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<Long>>any());
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testGetForm1AphirData_Success() {
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<Form1AphirDataResp>>any())).thenAnswer((invocation) -> {
+
+					RowMapper<Form1AphirDataResp> rowMapper = (RowMapper<Form1AphirDataResp>) invocation.getArgument(2);
+					ResultSet rs = Mockito.mock(ResultSet.class);
+
+					Mockito.when(rs.getString(ArgumentMatchers.eq("form_short_name"))).thenReturn("506");
+
+					List<Form1AphirDataResp> users = new ArrayList<Form1AphirDataResp>();
+					users.add(rowMapper.mapRow(rs, 0));
+					return users;
+				});
+
+		formRepo.getForm1AphirData(96L, 1L, null);
+
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testGetForm1AphirData_Exception() {
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<Form1AphirDataResp>>any())).thenThrow(new DataAccessException(null) {
+					private static final long serialVersionUID = 1L;
+				});
+
+		formRepo.getForm1AphirData(96L, 1L, null);
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testGetForm2RHIDTData_Success() {
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<Form2RHIDTDataResp>>any())).thenAnswer((invocation) -> {
+
+					RowMapper<Form2RHIDTDataResp> rowMapper = (RowMapper<Form2RHIDTDataResp>) invocation.getArgument(2);
+					ResultSet rs = Mockito.mock(ResultSet.class);
+
+					Mockito.when(rs.getString(ArgumentMatchers.eq("form_short_name"))).thenReturn("506");
+
+					List<Form2RHIDTDataResp> users = new ArrayList<Form2RHIDTDataResp>();
+					users.add(rowMapper.mapRow(rs, 0));
+					return users;
+				});
+
+		formRepo.getForm2RHIDTData(96L, 1L);
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testGetForm2RHIDTData_Exception() {
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<Form2RHIDTDataResp>>any())).thenThrow(new DataAccessException(null) {
+					private static final long serialVersionUID = 1L;
+				});
+
+		formRepo.getForm2RHIDTData(96L, 1L);
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testGetForm3RhiltData_Success() {
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<ApplicationList>>any())).thenAnswer((invocation) -> {
+
+					RowMapper<Form3RhiltDataResp> rowMapper = (RowMapper<Form3RhiltDataResp>) invocation.getArgument(2);
+					ResultSet rs = Mockito.mock(ResultSet.class);
+
+					Mockito.when(rs.getString(ArgumentMatchers.eq("form_short_name"))).thenReturn("506");
+
+					List<Form3RhiltDataResp> users = new ArrayList<Form3RhiltDataResp>();
+					users.add(rowMapper.mapRow(rs, 0));
+					return users;
+				});
+
+		formRepo.getForm3RhiltData(96L, 1L);
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testGetForm3RhiltData_Exception() {
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<Form3RhiltDataResp>>any())).thenThrow(new DataAccessException(null) {
+					private static final long serialVersionUID = 1L;
+				});
+
+		formRepo.getForm3RhiltData(96L, 1L);
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testGetForm4PrthiData_Success() {
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<ApplicationList>>any())).thenAnswer((invocation) -> {
+
+					RowMapper<Form4PrthiDataResp> rowMapper = (RowMapper<Form4PrthiDataResp>) invocation.getArgument(2);
+					ResultSet rs = Mockito.mock(ResultSet.class);
+
+					Mockito.when(rs.getString(ArgumentMatchers.eq("form_short_name"))).thenReturn("506");
+
+					List<Form4PrthiDataResp> users = new ArrayList<Form4PrthiDataResp>();
+					users.add(rowMapper.mapRow(rs, 0));
+					return users;
+				});
+
+		formRepo.getForm4PrthiData(96L, 1L);
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testGetForm4PrthiData_Exception() {
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<Form4PrthiDataResp>>any())).thenThrow(new DataAccessException(null) {
+					private static final long serialVersionUID = 1L;
+				});
+
+		formRepo.getForm4PrthiData(96L, 1L);
+	}
+
+	@Test
+	void testGetForm630dhiData_RowMapperCoverage() throws Exception {
+
+		when(jdbcTemplate.query(anyString(), any(Map.class), any(RowMapper.class)))
+				.thenAnswer(invocation -> {
+
+					@SuppressWarnings("unchecked")
+					RowMapper<Form630DhiDataResp> mapper = invocation.getArgument(2);
+
+					ResultSet rs = mock(ResultSet.class);
+
+					when(rs.getLong("id")).thenReturn(1L);
+					when(rs.getLong("hi_application_id")).thenReturn(2L);
+					when(rs.getLong("hi_form_transaction_id")).thenReturn(3L);
+					when(rs.getLong("student_id")).thenReturn(100L);
+
+					when(rs.getString("student_name")).thenReturn("John");
+					when(rs.getString("student_dob")).thenReturn("01/01/2015");
+					when(rs.getString("student_gender")).thenReturn("M");
+					when(rs.getString("student_grade")).thenReturn("5");
+					when(rs.getInt("student_grade_id")).thenReturn(5);
+					when(rs.getString("student_school")).thenReturn("ABC School");
+					when(rs.getString("student_school_code")).thenReturn("SCH01");
+					when(rs.getString("nurse_name")).thenReturn("Nancy");
+					when(rs.getString("notice_date")).thenReturn("08/06/2026");
+					when(rs.getString("physician_name")).thenReturn("Dr. Smith");
+					when(rs.getString("physician_verified_on")).thenReturn("08/07/2026");
+
+					return Collections.singletonList(mapper.mapRow(rs, 0));
+				});
+
+		List<Form630DhiDataResp> result = formRepo.getForm630dhiData(1L);
+
+		assertEquals(1, result.size());
+		assertEquals("John", result.get(0).getStudentName());
+		assertEquals("Nancy", result.get(0).getNurseName());
+	}
+
+	@Test
+	void testGetForm630dhiData_Exception() {
+
+		when(jdbcTemplate.query(anyString(), any(Map.class), any(RowMapper.class)))
+				.thenThrow(new RuntimeException());
+
+		assertTrue(formRepo.getForm630dhiData(1L).isEmpty());
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testGetForm760DhiData_Success() {
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<Form760DhiDataResp>>any())).thenAnswer((invocation) -> {
+
+					RowMapper<Form760DhiDataResp> rowMapper = (RowMapper<Form760DhiDataResp>) invocation.getArgument(2);
+					ResultSet rs = Mockito.mock(ResultSet.class);
+
+					Mockito.when(rs.getString(ArgumentMatchers.eq("form_short_name"))).thenReturn("506");
+
+					List<Form760DhiDataResp> users = new ArrayList<Form760DhiDataResp>();
+					users.add(rowMapper.mapRow(rs, 0));
+					return users;
+				});
+
+		formRepo.getForm760DhiData(96L);
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testGetForm760DhiData_Exception() {
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<Form760DhiDataResp>>any())).thenThrow(new DataAccessException(null) {
+					private static final long serialVersionUID = 1L;
+				});
+
+		formRepo.getForm760DhiData(96L);
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testGetForm1AphirScheduleData_Success() {
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<Form1AphirScheduleResp>>any())).thenAnswer((invocation) -> {
+
+					RowMapper<Form1AphirScheduleResp> rowMapper = (RowMapper<Form1AphirScheduleResp>) invocation
+							.getArgument(2);
+					ResultSet rs = Mockito.mock(ResultSet.class);
+
+					Mockito.when(rs.getString(ArgumentMatchers.eq("form_short_name"))).thenReturn("506");
+
+					List<Form1AphirScheduleResp> users = new ArrayList<Form1AphirScheduleResp>();
+					users.add(rowMapper.mapRow(rs, 0));
+					return users;
+				});
+
+		formRepo.getForm1AphirScheduleData(96L);
+
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testGetForm1AphirScheduleData_Exception() {
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<Form1AphirScheduleResp>>any())).thenThrow(new DataAccessException(null) {
+					private static final long serialVersionUID = 1L;
+				});
+
+		formRepo.getForm1AphirScheduleData(96L);
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testGetForm8HiscpData_Success() {
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<Form8HiscpDataResp>>any())).thenAnswer((invocation) -> {
+
+					RowMapper<Form8HiscpDataResp> rowMapper = (RowMapper<Form8HiscpDataResp>) invocation.getArgument(2);
+					ResultSet rs = Mockito.mock(ResultSet.class);
+
+					Mockito.when(rs.getString(ArgumentMatchers.eq("form_short_name"))).thenReturn("506");
+
+					List<Form8HiscpDataResp> users = new ArrayList<Form8HiscpDataResp>();
+					users.add(rowMapper.mapRow(rs, 0));
+					return users;
+				});
+
+		formRepo.getForm8HiscpData(96L, 1L);
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testGetForm8HiscpData_Exception() {
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<Form8HiscpDataResp>>any())).thenThrow(new DataAccessException(null) {
+					private static final long serialVersionUID = 1L;
+				});
+
+		formRepo.getForm8HiscpData(96L, 1L);
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testGetHIFormTransactionData_Success() throws Exception {
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<HIFormTransactionResp>>any())).thenAnswer((invocation) -> {
+
+					RowMapper<HIFormTransactionResp> rowMapper = (RowMapper<HIFormTransactionResp>) invocation
+							.getArgument(2);
+					ResultSet rs = Mockito.mock(ResultSet.class);
+
+					Mockito.when(rs.getString(ArgumentMatchers.eq("form_short_name"))).thenReturn("506");
+
+					List<HIFormTransactionResp> users = new ArrayList<HIFormTransactionResp>();
+					users.add(rowMapper.mapRow(rs, 0));
+					return users;
+				});
+
+		formRepo.getHIFormTransactionData(96L, 96L, 96L, "");
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testGetHIFormTransactionData_Exception() throws Exception {
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<HIFormTransactionResp>>any())).thenThrow(new DataAccessException(null) {
+					private static final long serialVersionUID = 1L;
+				});
+
+		formRepo.getHIFormTransactionData(96L, 96L, 96L, "");
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testUpdateForm4PRTHIdata_Success() throws Exception {
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<Long>>any())).thenAnswer((invocation) -> {
+
+					RowMapper<Long> rowMapper = (RowMapper<Long>) invocation.getArgument(2);
+					ResultSet rs = Mockito.mock(ResultSet.class);
+
+					Mockito.when(rs.getString(ArgumentMatchers.eq("form_short_name"))).thenReturn("506");
+
+					List<Long> users = new ArrayList<Long>();
+					users.add(rowMapper.mapRow(rs, 0));
+					return users;
+				});
+
+		formRepo.updateForm4PRTHIdata(new Form4Request());
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testUpdateForm4PRTHIdata_elseBranches() throws Exception {
+		Form4Request form4Request = new Form4Request();
+		form4Request.setLoggedInUserId("0f06KVmiMuG/nQrPJpnrxg==");
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<Long>>any())).thenAnswer((invocation) -> {
+
+					RowMapper<Long> rowMapper = (RowMapper<Long>) invocation.getArgument(2);
+					ResultSet rs = Mockito.mock(ResultSet.class);
+
+					Mockito.when(rs.getBoolean("is_valid")).thenReturn(true);
+					Mockito.when(rs.getInt("result_code")).thenReturn(0);
+					Mockito.when(rs.getLong("logged_in_user_id")).thenReturn(1L);
+					Mockito.when(rs.getString("logged_in_user_name")).thenReturn("John Doe");
+					Mockito.when(rs.getString("email_id")).thenReturn("john@example.com");
+
+					List<Long> users = new ArrayList<Long>();
+					users.add(rowMapper.mapRow(rs, 0));
+					return users;
+				});
+
+		formRepo.updateForm4PRTHIdata(form4Request);
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testUpdateForm4PRTHIdata_Exception() throws Exception {
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<Long>>any())).thenThrow(new DataAccessException(null) {
+					private static final long serialVersionUID = 1L;
+				});
+
+		formRepo.updateForm4PRTHIdata(new Form4Request());
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testUpdateForm8HISCPdata_Success() throws Exception {
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<Long>>any())).thenAnswer((invocation) -> {
+
+					RowMapper<Long> rowMapper = (RowMapper<Long>) invocation.getArgument(2);
+					ResultSet rs = Mockito.mock(ResultSet.class);
+
+					Mockito.when(rs.getString(ArgumentMatchers.eq("form_short_name"))).thenReturn("506");
+
+					List<Long> users = new ArrayList<Long>();
+					users.add(rowMapper.mapRow(rs, 0));
+					return users;
+				});
+
+		formRepo.updateForm8HISCPdata(new Form8Request());
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testUpdateForm8HISCPdata_elseBranches() throws Exception {
+		Form8Request form8Request = new Form8Request();
+		form8Request.setLoggedInUserId("0f06KVmiMuG/nQrPJpnrxg==");
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<Long>>any())).thenAnswer((invocation) -> {
+
+					RowMapper<Long> rowMapper = (RowMapper<Long>) invocation.getArgument(2);
+					ResultSet rs = Mockito.mock(ResultSet.class);
+
+					Mockito.when(rs.getBoolean("is_valid")).thenReturn(true);
+					Mockito.when(rs.getInt("result_code")).thenReturn(0);
+					Mockito.when(rs.getLong("logged_in_user_id")).thenReturn(1L);
+					Mockito.when(rs.getString("logged_in_user_name")).thenReturn("John Doe");
+					Mockito.when(rs.getString("email_id")).thenReturn("john@example.com");
+
+					List<Long> users = new ArrayList<Long>();
+					users.add(rowMapper.mapRow(rs, 0));
+					return users;
+				});
+
+		formRepo.updateForm8HISCPdata(form8Request);
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testUpdateForm8HISCPdata_Exception() throws Exception {
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<Long>>any())).thenThrow(new DataAccessException(null) {
+					private static final long serialVersionUID = 1L;
+				});
+
+		formRepo.updateForm8HISCPdata(new Form8Request());
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testGetHIFormMasterData_Success() throws Exception {
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<HIFormMasterResp>>any())).thenAnswer((invocation) -> {
+
+					RowMapper<HIFormMasterResp> rowMapper = (RowMapper<HIFormMasterResp>) invocation.getArgument(2);
+					ResultSet rs = Mockito.mock(ResultSet.class);
+
+					Mockito.when(rs.getString(ArgumentMatchers.eq("form_short_name"))).thenReturn("506");
+
+					List<HIFormMasterResp> users = new ArrayList<HIFormMasterResp>();
+					users.add(rowMapper.mapRow(rs, 0));
+					return users;
+				});
+
+		formRepo.getHIFormMasterData("");
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testGetHIFormMasterData_Exception() throws Exception {
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<HIFormMasterResp>>any())).thenThrow(new DataAccessException(null) {
+					private static final long serialVersionUID = 1L;
+				});
+
+		formRepo.getHIFormMasterData("");
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testGetApplicationInfoData_Success() throws Exception {
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<ApplicationInfoResp>>any())).thenAnswer((invocation) -> {
+
+					RowMapper<ApplicationInfoResp> rowMapper = (RowMapper<ApplicationInfoResp>) invocation
+							.getArgument(2);
+					ResultSet rs = Mockito.mock(ResultSet.class);
+
+					Mockito.when(rs.getString(ArgumentMatchers.eq("form_short_name"))).thenReturn("506");
+
+					List<ApplicationInfoResp> users = new ArrayList<ApplicationInfoResp>();
+					users.add(rowMapper.mapRow(rs, 0));
+					return users;
+				});
+
+		formRepo.getApplicationInfoData(96L, null);
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testGetApplicationInfoData_Exception() throws Exception {
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<ApplicationInfoResp>>any())).thenThrow(new DataAccessException(null) {
+					private static final long serialVersionUID = 1L;
+				});
+
+		formRepo.getApplicationInfoData(98L, null);
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testUpdateForm760DHIdata_Success() throws Exception {
+
+		Form760DHIRequest request = new Form760DHIRequest();
+		GetPhysicianInfoResp physcData = new GetPhysicianInfoResp();
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<Long>>any())).thenAnswer((invocation) -> {
+
+					RowMapper<Long> rowMapper = (RowMapper<Long>) invocation.getArgument(2);
+					ResultSet rs = Mockito.mock(ResultSet.class);
+
+					Mockito.when(rs.getString(ArgumentMatchers.eq("form_short_name"))).thenReturn("506");
+
+					List<Long> users = new ArrayList<Long>();
+					users.add(rowMapper.mapRow(rs, 0));
+					return users;
+				});
+
+		formRepo.updateForm760DHIdata(request, physcData);
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testUpdateForm760DHIdata_elseBranches() throws Exception {
+
+		Form760DHIRequest request = new Form760DHIRequest();
+		GetPhysicianInfoResp physcData = new GetPhysicianInfoResp();
+
+		request.setLoggedInUserId("0f06KVmiMuG/nQrPJpnrxg==");
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<StudentDataResp>>any())).thenAnswer((invocation) -> {
+
+					RowMapper<StudentDataResp> rowMapper = (RowMapper<StudentDataResp>) invocation.getArgument(2);
+					ResultSet rs = Mockito.mock(ResultSet.class);
+
+					Mockito.when(rs.getBoolean("is_valid")).thenReturn(true);
+					Mockito.when(rs.getInt("result_code")).thenReturn(0);
+					Mockito.when(rs.getLong("logged_in_user_id")).thenReturn(1L);
+					Mockito.when(rs.getString("logged_in_user_name")).thenReturn("John Doe");
+					Mockito.when(rs.getString("email_id")).thenReturn("john@example.com");
+
+					List<StudentDataResp> users = new ArrayList<StudentDataResp>();
+					users.add(rowMapper.mapRow(rs, 0));
+					return users;
+				});
+
+		formRepo.updateForm760DHIdata(request, physcData);
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testUpdateForm760DHIdata_Exception() throws Exception {
+
+		Form760DHIRequest request = new Form760DHIRequest();
+		GetPhysicianInfoResp physcData = new GetPhysicianInfoResp();
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<Long>>any())).thenThrow(new DataAccessException(null) {
+					private static final long serialVersionUID = 1L;
+				});
+
+		formRepo.updateForm760DHIdata(request, physcData);
+	}
+
+	@Test
+	void testGetNotificationList_Success() throws Exception {
+
+		Long applicationId = 100L;
+		String userType = "PARENT";
+
+		/*
+		 * First query: fn_get_notification_list
+		 */
+		Mockito.when(jdbcTemplate.query(Mockito.contains("fn_get_notification_list"), Mockito.anyMap(),
+				ArgumentMatchers.<RowMapper<NotificationList>>any())).thenAnswer(invocation -> {
+
+					@SuppressWarnings("unchecked")
+					RowMapper<NotificationList> rowMapper = (RowMapper<NotificationList>) invocation.getArgument(2);
+
+					ResultSet rs = Mockito.mock(ResultSet.class);
+
+					Mockito.when(rs.getLong("id")).thenReturn(1L);
+					Mockito.when(rs.getString("title")).thenReturn("Test Notification");
+
+					NotificationList notification = rowMapper.mapRow(rs, 0);
+
+					return Arrays.asList(notification);
+				});
+
+		/*
+		 * Second query: fn_get_notofication_details
+		 */
+		Mockito.when(jdbcTemplate.query(Mockito.contains("fn_get_notofication_details"), Mockito.anyMap(),
+				ArgumentMatchers.<RowMapper<NotificationDetailsResp>>any())).thenAnswer(invocation -> {
+
+					@SuppressWarnings("unchecked")
+					RowMapper<NotificationDetailsResp> rowMapper = (RowMapper<NotificationDetailsResp>) invocation
+							.getArgument(2);
+
+					ResultSet rs = Mockito.mock(ResultSet.class);
+
+					Mockito.when(rs.getString("request_on")).thenReturn("08/14/2026");
+
+					Mockito.when(rs.getString("comment")).thenReturn("Test Comment");
+
+					Mockito.when(rs.getLong("request_by")).thenReturn(10L);
+
+					Mockito.when(rs.getString("request_by_name")).thenReturn("John Doe");
+
+					NotificationDetailsResp details = rowMapper.mapRow(rs, 0);
+
+					return Arrays.asList(details);
+				});
+
+		List<NotificationList> result = formRepo.getNotificationList(applicationId, userType);
+
+		assertNotNull(result);
+		assertEquals(1, result.size());
+
+		NotificationList notification = result.get(0);
+
+		assertEquals(1L, notification.getId());
+		assertEquals("Test Notification", notification.getTitle());
+
+		assertNotNull(notification.getNotificationDetails());
+		assertEquals(1, notification.getNotificationDetails().size());
+
+		NotificationDetailsResp details = notification.getNotificationDetails().get(0);
+
+		assertEquals("08/14/2026", details.getRequestedOn());
+		assertEquals("Test Comment", details.getComment());
+		assertEquals(10L, details.getRequestedBy());
+		assertEquals("John Doe", details.getRequestedByName());
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testGetNotificationList_Exception() throws Exception {
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<NotificationList>>any())).thenThrow(new DataAccessException(null) {
+					private static final long serialVersionUID = 1L;
+				});
+
+		formRepo.getNotificationList(0L, "");
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testgetNotificationDetails_Success() throws Exception {
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<NotificationDetailsResp>>any())).thenAnswer((invocation) -> {
+
+					RowMapper<NotificationDetailsResp> rowMapper = (RowMapper<NotificationDetailsResp>) invocation
+							.getArgument(2);
+					ResultSet rs = Mockito.mock(ResultSet.class);
+
+					Mockito.when(rs.getString(ArgumentMatchers.eq("form_short_name"))).thenReturn("506");
+
+					List<NotificationDetailsResp> users = new ArrayList<NotificationDetailsResp>();
+					users.add(rowMapper.mapRow(rs, 0));
+					return users;
+				});
+
+		formRepo.getNotificationDetails(0L, 0L, null);
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testgetNotificationDetails_Exception() throws Exception {
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<NotificationDetailsResp>>any())).thenThrow(new DataAccessException(null) {
+					private static final long serialVersionUID = 1L;
+				});
+
+		formRepo.getNotificationDetails(0L, 0L, null);
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testGetApplicationTrackingData_Success() throws Exception {
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<GetApplicationTrackingResp>>any())).thenAnswer((invocation) -> {
+
+					RowMapper<GetApplicationTrackingResp> rowMapper = (RowMapper<GetApplicationTrackingResp>) invocation
+							.getArgument(2);
+					ResultSet rs = Mockito.mock(ResultSet.class);
+
+					Mockito.when(rs.getString(ArgumentMatchers.eq("p_student_id"))).thenReturn("NEW");
+
+					List<GetApplicationTrackingResp> users = new ArrayList<GetApplicationTrackingResp>();
+					users.add(rowMapper.mapRow(rs, 0));
+					return users;
+				});
+
+		formRepo.getApplicationTrackingData("", "", "", "");
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testGetApplicationTrackingData_elseBranches() throws Exception {
+
+		String applicationIds = "23,54,87";
+		String schoolYear = "26-27";
+		String loggedInUserId = "0f06KVmiMuG/nQrPJpnrxg==";
+		String loggedInUserPersonType = "PRNT";
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<GetApplicationTrackingResp>>any())).thenAnswer((invocation) -> {
+
+					RowMapper<GetApplicationTrackingResp> rowMapper = (RowMapper<GetApplicationTrackingResp>) invocation
+							.getArgument(2);
+					ResultSet rs = Mockito.mock(ResultSet.class);
+
+					Mockito.when(rs.getBoolean("is_valid")).thenReturn(true);
+					Mockito.when(rs.getInt("result_code")).thenReturn(0);
+					Mockito.when(rs.getLong("logged_in_user_id")).thenReturn(1L);
+					Mockito.when(rs.getString("logged_in_user_name")).thenReturn("John Doe");
+					Mockito.when(rs.getString("email_id")).thenReturn("john@example.com");
+
+					List<GetApplicationTrackingResp> users = new ArrayList<GetApplicationTrackingResp>();
+					users.add(rowMapper.mapRow(rs, 0));
+					return users;
+				});
+
+		formRepo.getApplicationTrackingData(applicationIds, schoolYear, loggedInUserId, loggedInUserPersonType);
+	}
+
+	@Test
+	void testGetApplicationTrackingData_Exception() throws Exception {
+
+		String applicationId = "10";
+		String schoolYear = "2026";
+
+		Mockito.when(jdbcTemplate.query(Mockito.contains("fn_get_application_tracking_list"), Mockito.anyMap(),
+				ArgumentMatchers.<RowMapper<GetApplicationTrackingResp>>any()))
+				.thenThrow(new RuntimeException("Database Exception"));
+
+		List<GetApplicationTrackingResp> result = formRepo.getApplicationTrackingData(applicationId, schoolYear,
+				"KfftbXVM2qI3/V2Mhy3MKQ==", "PRNT");
+
+		assertNotNull(result);
+		assertEquals(0, result.size());
+
+		Mockito.verify(jdbcTemplate, Mockito.times(1)).query(Mockito.contains("fn_get_application_tracking_list"),
+				Mockito.anyMap(), ArgumentMatchers.<RowMapper<GetApplicationTrackingResp>>any());
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testUpdateApplicationTrackingData_Success() throws Exception {
+
+		ApplicationTrackingRequest request = new ApplicationTrackingRequest();
+
+		List<ApplicationTrackingDataList> dataList = new ArrayList<>();
+
+		request.setApplicationTrackingDataList(dataList);
+
+		Mockito.when(utility.stringToXmlFormat(dataList)).thenReturn("<ArrayList><item>Test</item></ArrayList>");
+
+		Mockito.when(jdbcTemplate.queryForObject(Mockito.anyString(), Mockito.any(Map.class), Mockito.eq(Void.class)))
+				.thenReturn(null);
+
+		formRepo.updateApplicationTrackingData(request, "", "PARENT");
+
+		Mockito.verify(utility, Mockito.times(1)).stringToXmlFormat(dataList);
+
+		Mockito.verify(jdbcTemplate, Mockito.times(1)).queryForObject(
+				Mockito.contains("fn_update_application_tracking"), Mockito.any(Map.class), Mockito.eq(Void.class));
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testUpdateApplicationTrackingData_elseBranches() throws Exception {
+
+		ApplicationTrackingRequest request = new ApplicationTrackingRequest();
+		String loggedInuserId = "0f06KVmiMuG/nQrPJpnrxg==";
+		String loggedInUserPersonType = "PRNT";
+
+		List<ApplicationTrackingDataList> dataList = new ArrayList<>();
+
+		request.setApplicationTrackingDataList(dataList);
+
+		Mockito.when(utility.stringToXmlFormat(dataList)).thenReturn("<ArrayList><item>Test</item></ArrayList>");
+
+		Mockito.when(jdbcTemplate.queryForObject(Mockito.anyString(), Mockito.any(Map.class), Mockito.eq(Void.class)))
+				.thenReturn(null);
+
+		formRepo.updateApplicationTrackingData(request, loggedInuserId, loggedInUserPersonType);
+
+		Mockito.verify(utility, Mockito.times(1)).stringToXmlFormat(dataList);
+
+		Mockito.verify(jdbcTemplate, Mockito.times(1)).queryForObject(
+				Mockito.contains("fn_update_application_tracking"), Mockito.any(Map.class), Mockito.eq(Void.class));
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testUpdateApplicationTrackingData_Exception() throws Exception {
+		ApplicationTrackingRequest request = new ApplicationTrackingRequest();
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<StudentDataResp>>any())).thenThrow(new DataAccessException(null) {
+					private static final long serialVersionUID = 1L;
+
+				});
+		formRepo.updateApplicationTrackingData(request, "", "PARENT");
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testGetPhysicianInfoData_Success() throws Exception {
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<GetPhysicianInfoResp>>any())).thenAnswer((invocation) -> {
+
+					RowMapper<GetPhysicianInfoResp> rowMapper = (RowMapper<GetPhysicianInfoResp>) invocation
+							.getArgument(2);
+					ResultSet rs = Mockito.mock(ResultSet.class);
+
+					Mockito.when(rs.getString(ArgumentMatchers.eq("form_short_name"))).thenReturn("506");
+
+					List<GetPhysicianInfoResp> users = new ArrayList<GetPhysicianInfoResp>();
+					users.add(rowMapper.mapRow(rs, 0));
+					return users;
+				});
+
+		formRepo.getPhysicianInfoData(0L);
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	void testGetPhysicianInfoData_Exception() throws Exception {
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.any(Map.class),
+				ArgumentMatchers.<RowMapper<GetPhysicianInfoResp>>any())).thenThrow(new DataAccessException(null) {
+					private static final long serialVersionUID = 1L;
+				});
+
+		formRepo.getPhysicianInfoData(0L);
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	void testUpdateForm1APHIRdataWithLoggedInUser() throws Exception {
+
+		Form1Request req = new Form1Request();
+
+		req.setLoggedInUserId(AES.encrypt("12345", Constant.SALT_AES));
+
+		Mockito.when(utility.stringToXmlFormat(Mockito.any())).thenReturn("<ArrayList><item>test</item></ArrayList>");
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.anyMap(), ArgumentMatchers.<RowMapper<Long>>any()))
+				.thenAnswer(invocation -> {
+
+					RowMapper<Long> mapper = (RowMapper<Long>) invocation.getArgument(2);
+
+					ResultSet rs = Mockito.mock(ResultSet.class);
+					Mockito.when(rs.getLong("tag_id")).thenReturn(1L);
+
+					return Arrays.asList(mapper.mapRow(rs, 0));
+
+				});
+
+		List<Long> result = formRepo.updateForm1APHIRdata(req);
+
+		assertNotNull(result);
+		assertEquals(1, result.size());
+
+		Mockito.verify(utility).stringToXmlFormat(Mockito.any());
+
+		Mockito.verify(jdbcTemplate).query(Mockito.anyString(),
+				Mockito.argThat((Map<String, Object> map) -> map.get("p_logged_in_user") != null),
+				ArgumentMatchers.<RowMapper<Long>>any());
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	void testUpdateForm2RHIDTdataWithLoggedInUser() throws Exception {
+
+		Form2Request req = new Form2Request();
+
+		req.setLoggedInUserId(AES.encrypt("12345", Constant.SALT_AES));
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.anyMap(), ArgumentMatchers.<RowMapper<Long>>any()))
+				.thenAnswer(invocation -> {
+
+					RowMapper<Long> mapper = (RowMapper<Long>) invocation.getArgument(2);
+
+					ResultSet rs = Mockito.mock(ResultSet.class);
+					Mockito.when(rs.getLong("tag_id")).thenReturn(10L);
+
+					return Arrays.asList(mapper.mapRow(rs, 0));
+
+				});
+
+		List<Long> result = formRepo.updateForm2RHIDTdata(req);
+
+		assertNotNull(result);
+		assertEquals(1, result.size());
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	void testUpdateForm3RHILTdataWithLoggedInUser() throws Exception {
+
+		Form3Request req = new Form3Request();
+
+		req.setLoggedInUserId(AES.encrypt("12345", Constant.SALT_AES));
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.anyMap(), ArgumentMatchers.<RowMapper<Long>>any()))
+				.thenAnswer(invocation -> {
+
+					RowMapper<Long> mapper = (RowMapper<Long>) invocation.getArgument(2);
+
+					ResultSet rs = Mockito.mock(ResultSet.class);
+					Mockito.when(rs.getLong("tag_id")).thenReturn(20L);
+
+					return Arrays.asList(mapper.mapRow(rs, 0));
+
+				});
+
+		List<Long> result = formRepo.updateForm3RHILTdata(req);
+
+		assertNotNull(result);
+		assertEquals(1, result.size());
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	void testUpdateForm4PRTHIdataWithLoggedInUser() throws Exception {
+
+		Form4Request req = new Form4Request();
+
+		req.setLoggedInUserId(AES.encrypt("12345", Constant.SALT_AES));
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.anyMap(), ArgumentMatchers.<RowMapper<Long>>any()))
+				.thenAnswer(invocation -> {
+
+					RowMapper<Long> mapper = (RowMapper<Long>) invocation.getArgument(2);
+
+					ResultSet rs = Mockito.mock(ResultSet.class);
+					Mockito.when(rs.getLong("tag_id")).thenReturn(30L);
+
+					return Arrays.asList(mapper.mapRow(rs, 0));
+
+				});
+
+		List<Long> result = formRepo.updateForm4PRTHIdata(req);
+
+		assertNotNull(result);
+		assertEquals(1, result.size());
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	void testUpdateForm8HISCPdataWithLoggedInUser() throws Exception {
+
+		Form8Request req = new Form8Request();
+
+		req.setLoggedInUserId(AES.encrypt("12345", Constant.SALT_AES));
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.anyMap(), ArgumentMatchers.<RowMapper<Long>>any()))
+				.thenAnswer(invocation -> {
+
+					RowMapper<Long> mapper = (RowMapper<Long>) invocation.getArgument(2);
+
+					ResultSet rs = Mockito.mock(ResultSet.class);
+					Mockito.when(rs.getLong("tag_id")).thenReturn(40L);
+
+					return Arrays.asList(mapper.mapRow(rs, 0));
+
+				});
+
+		List<Long> result = formRepo.updateForm8HISCPdata(req);
+
+		assertNotNull(result);
+		assertEquals(1, result.size());
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	void testUpdateForm9EAPPDataWithLoggedInUser() throws Exception {
+
+		Form9Request req = new Form9Request();
+
+		req.setLoggedInUserId(AES.encrypt("12345", Constant.SALT_AES));
+
+		Mockito.when(utility.stringToXmlFormat(Mockito.any())).thenReturn("<ArrayList><item>test</item></ArrayList>");
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.anyMap(), ArgumentMatchers.<RowMapper<Long>>any()))
+				.thenAnswer(invocation -> {
+
+					RowMapper<Long> mapper = (RowMapper<Long>) invocation.getArgument(2);
+
+					ResultSet rs = Mockito.mock(ResultSet.class);
+					Mockito.when(rs.getLong("tag_id")).thenReturn(50L);
+
+					return Arrays.asList(mapper.mapRow(rs, 0));
+
+				});
+
+		List<Long> result = formRepo.updateForm9EAPPData(req);
+
+		assertNotNull(result);
+		assertEquals(1, result.size());
+
+		Mockito.verify(utility).stringToXmlFormat(Mockito.any());
+
+		Mockito.verify(jdbcTemplate).query(Mockito.anyString(),
+				Mockito.argThat((Map<String, Object> map) -> map.containsKey("p_form9_eapp_plan_xml_string")
+						&& map.get("p_logged_in_user") != null),
+				ArgumentMatchers.<RowMapper<Long>>any());
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	void testUpdateForm30DHIdataWithLoggedInUser() throws Exception {
+
+		Form630DHIRequest req = new Form630DHIRequest();
+
+		req.setLoggedInUserId(AES.encrypt("12345", Constant.SALT_AES));
+
+		GetPhysicianInfoResp physician = new GetPhysicianInfoResp("Dr Test", "2026-01-01");
+
+		List<GetPhysicianInfoResp> physicianList = Arrays.asList(physician);
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.anyMap(), ArgumentMatchers.<RowMapper<Long>>any()))
+				.thenAnswer(invocation -> {
+
+					RowMapper<Long> mapper = (RowMapper<Long>) invocation.getArgument(2);
+
+					ResultSet rs = Mockito.mock(ResultSet.class);
+					Mockito.when(rs.getLong("tag_id")).thenReturn(60L);
+
+					return Arrays.asList(mapper.mapRow(rs, 0));
+
+				});
+
+		List<Long> result = formRepo.updateForm30DHIdata(req, physicianList);
+
+		assertNotNull(result);
+		assertEquals(1, result.size());
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	void testUpdateForm760DHIdataWithLoggedInUser() throws Exception {
+
+		Form760DHIRequest req = new Form760DHIRequest();
+
+		req.setLoggedInUserId(AES.encrypt("12345", Constant.SALT_AES));
+
+		GetPhysicianInfoResp physician = new GetPhysicianInfoResp("Dr Test", "2026-01-01");
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.anyMap(), ArgumentMatchers.<RowMapper<Long>>any()))
+				.thenAnswer(invocation -> {
+
+					RowMapper<Long> mapper = (RowMapper<Long>) invocation.getArgument(2);
+
+					ResultSet rs = Mockito.mock(ResultSet.class);
+					Mockito.when(rs.getLong("tag_id")).thenReturn(70L);
+
+					return Arrays.asList(mapper.mapRow(rs, 0));
+
+				});
+
+		List<Long> result = formRepo.updateForm760DHIdata(req, physician);
+
+		assertNotNull(result);
+		assertEquals(1, result.size());
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	void testUpdateApplicationTrackingDataWithLoggedInUser() throws Exception {
+
+		ApplicationTrackingRequest req = new ApplicationTrackingRequest();
+
+		Mockito.when(utility.stringToXmlFormat(Mockito.any())).thenReturn("<ArrayList><item>test</item></ArrayList>");
+
+		Mockito.when(jdbcTemplate.queryForObject(Mockito.anyString(), Mockito.anyMap(),
+				ArgumentMatchers.<RowMapper<Object>>any())).thenReturn(null);
+
+		assertDoesNotThrow(
+				() -> formRepo.updateApplicationTrackingData(req, AES.encrypt("12345", Constant.SALT_AES), "USER"));
+
+		Mockito.verify(utility).stringToXmlFormat(Mockito.any());
+
+		Mockito.verify(jdbcTemplate).queryForObject(Mockito.anyString(),
+				Mockito.argThat((Map<String, Object> map) -> map.get("p_logged_in_user") != null
+						&& "USER".equals(map.get("p_logged_in_user_person_type"))),
+				ArgumentMatchers.<RowMapper<Object>>any());
+	}
+
+	@Test
+	void testUpdateApplicationTrackingDataException() throws Exception {
+
+		ApplicationTrackingRequest req = new ApplicationTrackingRequest();
+
+		Mockito.when(utility.stringToXmlFormat(Mockito.any())).thenReturn("<test/>");
+
+		Mockito.when(jdbcTemplate.queryForObject(Mockito.anyString(), Mockito.anyMap(),
+				ArgumentMatchers.<RowMapper<Object>>any())).thenThrow(new DataAccessException("DB Error") {
+					private static final long serialVersionUID = 1L;
+				});
+
+		assertThrows(Exception.class, () -> formRepo.updateApplicationTrackingData(req, "", "USER"));
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	void testGetApplicationTrackingDataWithLoggedInUser() {
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.anyMap(),
+				ArgumentMatchers.<RowMapper<com.jcboe.home.instruction.response.GetApplicationTrackingResp>>any()))
+				.thenReturn(new ArrayList<>());
+
+		List<com.jcboe.home.instruction.response.GetApplicationTrackingResp> result = formRepo
+				.getApplicationTrackingData("1", "2026", AES.encrypt("12345", Constant.SALT_AES), "USER");
+
+		assertNotNull(result);
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	void testGetNotificationDetailsException() {
+
+		Mockito.when(jdbcTemplate.query(Mockito.anyString(), Mockito.anyMap(),
+				ArgumentMatchers.<RowMapper<com.jcboe.home.instruction.response.NotificationDetailsResp>>any()))
+				.thenThrow(new DataAccessException("DB Error") {
+					private static final long serialVersionUID = 1L;
+				});
+
+		assertThrows(Exception.class, () -> formRepo.getNotificationDetails(1L, 2L, "USER"));
+	}
+
+}

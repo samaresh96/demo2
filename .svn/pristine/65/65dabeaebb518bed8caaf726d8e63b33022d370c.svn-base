@@ -1,0 +1,1792 @@
+/*
+ * Copyright (C) YYYY-YYYY XXXXXXXXXXXXX
+ * mailto:AAAA@DDDD.COM
+ *
+ */
+package com.jcboe.home.instruction.service;
+
+import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.FilenameUtils;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
+
+import com.jcboe.home.instruction.exception.HomeInstructionException;
+import com.jcboe.home.instruction.model.request.Form10Request;
+import com.jcboe.home.instruction.model.request.Form1Request;
+import com.jcboe.home.instruction.model.request.Form2Request;
+import com.jcboe.home.instruction.model.request.Form3Request;
+import com.jcboe.home.instruction.model.request.Form4Request;
+import com.jcboe.home.instruction.model.request.Form630DHIRequest;
+import com.jcboe.home.instruction.model.request.Form760DHIRequest;
+import com.jcboe.home.instruction.model.request.Form8Request;
+import com.jcboe.home.instruction.model.request.Form9Request;
+import com.jcboe.home.instruction.model.request.UpdateHIActivityReq;
+import com.jcboe.home.instruction.model.request.UpdateHIApplicationReq;
+import com.jcboe.home.instruction.model.request.UploadFormDocumentReq;
+import com.jcboe.home.instruction.model.request.UserInfoReq;
+import com.jcboe.home.instruction.repo.AppConfigRepo;
+import com.jcboe.home.instruction.repo.ApplicationListRepo;
+import com.jcboe.home.instruction.repo.HomeInstructionRepo;
+import com.jcboe.home.instruction.repo.UserDetailsRepo;
+import com.jcboe.home.instruction.response.ApplicationInfoResp;
+import com.jcboe.home.instruction.response.FileUploadResp;
+import com.jcboe.home.instruction.response.Form10HSAPPDataResp;
+import com.jcboe.home.instruction.response.Form10HSAPPResponseDTO;
+import com.jcboe.home.instruction.response.Form1APHIRResponseDTO;
+import com.jcboe.home.instruction.response.Form1AphirDataResp;
+import com.jcboe.home.instruction.response.Form1AphirResp;
+import com.jcboe.home.instruction.response.Form1AphirScheduleResp;
+import com.jcboe.home.instruction.response.Form2RHIDTDataResp;
+import com.jcboe.home.instruction.response.Form2RHIDTResponseDTO;
+import com.jcboe.home.instruction.response.Form2RhidtResp;
+import com.jcboe.home.instruction.response.Form3RhiltDataResp;
+import com.jcboe.home.instruction.response.Form3RhiltResp;
+import com.jcboe.home.instruction.response.Form3RhiltResponseDTO;
+import com.jcboe.home.instruction.response.Form4PrthiDataResp;
+import com.jcboe.home.instruction.response.Form4PrthiResp;
+import com.jcboe.home.instruction.response.Form4PrthiResponseDTO;
+import com.jcboe.home.instruction.response.Form630DHIResp;
+import com.jcboe.home.instruction.response.Form630DhiDataResp;
+import com.jcboe.home.instruction.response.Form630DhiResponseDTO;
+import com.jcboe.home.instruction.response.Form760DhiDataResp;
+import com.jcboe.home.instruction.response.Form760DhiResp;
+import com.jcboe.home.instruction.response.Form760DhiResponseDTO;
+import com.jcboe.home.instruction.response.Form8HiscpDataResp;
+import com.jcboe.home.instruction.response.Form8HiscpResp;
+import com.jcboe.home.instruction.response.Form8HiscpResponseDTO;
+import com.jcboe.home.instruction.response.Form9EAPPDataResp;
+import com.jcboe.home.instruction.response.Form9EAPPPlanDataResp;
+import com.jcboe.home.instruction.response.Form9EAPPResp;
+import com.jcboe.home.instruction.response.Form9EAPPResponseDTO;
+import com.jcboe.home.instruction.response.GetPhysicianInfoResp;
+import com.jcboe.home.instruction.response.HIFormTransactionResp;
+import com.jcboe.home.instruction.response.LookupDetails;
+import com.jcboe.home.instruction.response.StudentDataResp;
+import com.jcboe.home.instruction.response.UpdateHIActivityResp;
+import com.jcboe.home.instruction.utilities.AES;
+import com.jcboe.home.instruction.utilities.Constant;
+import com.jcboe.home.instruction.utilities.Utility;
+
+@Service
+public class HomeInstructionServiceImpl implements IHomeInstructionService {
+
+	private final Logger logger = LogManager.getLogger(HomeInstructionServiceImpl.class);
+	private HomeInstructionRepo homeInstructionRepo;
+	private Utility utility;
+	private FileUploadServiceImpl fileUploadService;
+	private UserDetailsRepo userDetailsRepo;
+	private ApplicationListRepo applicationListRepo;
+	private AppConfigRepo appConfigRepo;
+
+	@Autowired
+	public HomeInstructionServiceImpl(HomeInstructionRepo homeInstructionRepo, Utility utility,
+			FileUploadServiceImpl fileUploadService, UserDetailsRepo userDetailsRepo,
+			ApplicationListRepo applicationListRepo, AppConfigRepo appConfigRepo) {
+		this.homeInstructionRepo = homeInstructionRepo;
+		this.utility = utility;
+		this.fileUploadService = fileUploadService;
+		this.userDetailsRepo = userDetailsRepo;
+		this.applicationListRepo = applicationListRepo;
+		this.appConfigRepo = appConfigRepo;
+	}
+
+	@Override
+	@Transactional
+	public Form1AphirResp updateForm1Data(Form1Request form1Request) { // NOSONAR
+
+		try {
+
+			logger.debug("Request for Form1 APHIM. {}",
+					utility.printJson(form1Request) != null ? utility.printJson(form1Request) : form1Request);
+
+			Map<String, String> configKeyValuesForF = utility.getConfigList("FILETMPL,TEMPL_PATH,HI_APPLN_HTML_APHIA");
+			String templatePath = "";
+			if (StringUtils.equalsIgnoreCase(form1Request.getFormAbbreviation(), "APHIA")) {
+				templatePath = configKeyValuesForF.get("TEMPL_PATH") + File.separator
+						+ configKeyValuesForF.get("HI_APPLN_HTML_APHIA");
+			} else {
+				templatePath = configKeyValuesForF.get("TEMPL_PATH") + File.separator + "HI_APPLN_"
+						+ form1Request.getFormAbbreviation() + ".html";
+			}
+
+			UpdateHIApplicationReq updateHiApplicationReq = new UpdateHIApplicationReq();
+
+			updateHiApplicationReq.setId(form1Request.getApplicationId());
+			updateHiApplicationReq.setStudentId(form1Request.getStudentId());
+			updateHiApplicationReq.setSchoolYear(form1Request.getSchoolYear());
+			updateHiApplicationReq.setApplicationType(form1Request.getApplicationType());
+			updateHiApplicationReq.setSchoolCode(form1Request.getSchoolCode());
+			updateHiApplicationReq.setGradeId(form1Request.getGradeId());
+			updateHiApplicationReq.setRequestDate(form1Request.getRequestDate());
+			if (StringUtils.equalsIgnoreCase(form1Request.getActivity(), "AMDFT")
+					|| StringUtils.equalsIgnoreCase(form1Request.getActivity(), "AMSBM")
+					|| StringUtils.equalsIgnoreCase(form1Request.getActivity(), "RESBM")) {
+				updateHiApplicationReq.setClassification(form1Request.getClassification());
+			} else {
+				updateHiApplicationReq.setClassification("GENOT");
+			}
+			updateHiApplicationReq.setSubmittedBy(form1Request.getLoggedInUserId());
+			updateHiApplicationReq.setSubmittedByPersonType(form1Request.getLoggedInUserPersonType());
+
+			if (form1Request.getApplicationId() == null || form1Request.getApplicationId() == 0L) {
+				updateHiApplicationReq.setIndicator("I");
+				List<Long> applicationId = applicationListRepo.updateHIApplication(updateHiApplicationReq);
+				form1Request.setApplicationId(applicationId.get(0));
+			} else {
+				updateHiApplicationReq.setIndicator("U");
+				List<Long> applicationId = applicationListRepo.updateHIApplication(updateHiApplicationReq);
+				form1Request.setApplicationId(applicationId.get(0));
+			}
+
+			List<Long> updateForm1DataList = homeInstructionRepo.updateForm1APHIRdata(form1Request);
+
+			if (CollectionUtils.isEmpty(updateForm1DataList) || updateForm1DataList.get(0) <= 0) {
+
+				logger.info("Unable to submit Form1 APHIR.");
+
+				return new Form1AphirResp(false, Constant.getMessageMap().get(Constant.UCF_UUR),
+						utility.responseDate(LocalDateTime.now()), 0L);
+			}
+
+			List<Form1AphirDataResp> dataList = homeInstructionRepo.getForm1AphirData(updateForm1DataList.get(0),
+					form1Request.getApplicationId(), form1Request.getLoggedInUserPersonType());
+			List<Form1AphirScheduleResp> scheduleData = homeInstructionRepo// NOSONAR
+					.getForm1AphirScheduleData(updateForm1DataList.get(0));// NOSONAR
+
+			if (CollectionUtils.isEmpty(dataList)) {
+				throw new HomeInstructionException("Unable to fetch updated Form1 APHIR data.",
+						Constant.DATABASE_ERROR_CODE);
+			}
+
+			if (StringUtils.equalsIgnoreCase(form1Request.getStatus(), "DRFT")) {
+				if (StringUtils.equalsIgnoreCase(form1Request.getIndicator(), "I")) {
+					UpdateHIActivityReq updateHIActivityReq = new UpdateHIActivityReq();
+
+					updateHIActivityReq.setApplicationId(form1Request.getApplicationId());
+					updateHIActivityReq.setActivity(form1Request.getActivity());
+					updateHIActivityReq.setStatus(form1Request.getStatus());
+					updateHIActivityReq.setComment(form1Request.getComment());
+					updateHIActivityReq.setActionTakenBy(form1Request.getLoggedInUserId());
+					updateHIActivityReq.setActionTakenByPersonType(form1Request.getLoggedInUserPersonType());
+
+					List<UpdateHIActivityResp> updateHIActivityResp = applicationListRepo
+							.updateHIActivity(updateHIActivityReq); // NOSONAR
+					return new Form1AphirResp(true, Constant.getMessageMap().get(Constant.UCF_FSD),
+							utility.responseDate(LocalDateTime.now()), updateForm1DataList.get(0),
+							form1Request.getApplicationId(), updateHIActivityResp.get(0).getApplicationNo(),
+							updateHIActivityResp.get(0).getApplicationStatus(),
+							updateHIActivityResp.get(0).getApplicationStatusAbbrev(), null);
+				} else {
+					return new Form1AphirResp(true, Constant.getMessageMap().get(Constant.UCF_FSD),
+							utility.responseDate(LocalDateTime.now()), updateForm1DataList.get(0),
+							form1Request.getApplicationId(), dataList.get(0).getApplicationNo(),
+							dataList.get(0).getApplicationStatus(), dataList.get(0).getApplicationStatusAbbrev(), null);
+				}
+
+			} else {
+				String modifiedTemplatePath = configKeyValuesForF.get("FILETMPL") + File.separator
+						+ "ModiFied_HI_APPLN_" + form1Request.getFormAbbreviation() + "_"
+						+ form1Request.getApplicationId() + ".html";
+				String temporaryPdfPath = configKeyValuesForF.get("FILETMPL") + File.separator + "HI_APPLN_"
+						+ form1Request.getFormAbbreviation() + "_" + form1Request.getApplicationId() + ".pdf";
+
+				File pdfFile = generateForm1Pdf(dataList.get(0), form1Request.getFormAbbreviation(), templatePath, // NOSONAR
+						modifiedTemplatePath, temporaryPdfPath, scheduleData);
+
+				MultipartFile multipartFile = utility.convertFileToMultipartFile(new File(temporaryPdfPath));
+
+				UploadFormDocumentReq uploadReq = new UploadFormDocumentReq();
+
+				uploadReq.setIndicator("I");
+				uploadReq.setId(0);
+				uploadReq.setStudentId(form1Request.getStudentId());
+				uploadReq.setSchoolYear(form1Request.getSchoolYear());
+				uploadReq.setApplicationType(form1Request.getApplicationType());
+				uploadReq.setSchoolCode(form1Request.getSchoolCode());
+				uploadReq.setGradeId(form1Request.getGradeId());
+				uploadReq.setRequestDate(form1Request.getRequestDate());
+				uploadReq.setClassification(form1Request.getClassification());
+				uploadReq.setActivity(form1Request.getActivity());
+				uploadReq.setStatus(form1Request.getStatus());
+				uploadReq.setComment(form1Request.getComment());
+				uploadReq.setApplicationId(form1Request.getApplicationId());
+				uploadReq.setFormMasterId(form1Request.getFormMasterId());
+				uploadReq.setOtherDocumentName(form1Request.getOtherDocumentName());
+				uploadReq.setUploadedGeneratedTag("S");
+				uploadReq.setOriginalFileName(FilenameUtils.getName(temporaryPdfPath));
+				uploadReq.setUploadedBy(form1Request.getLoggedInUserId());
+				uploadReq.setUploadPersonType(form1Request.getLoggedInUserPersonType());
+
+				FileUploadResp uploadResp = fileUploadService.uploadAndParseFile(multipartFile, uploadReq);
+
+				if (!uploadResp.isSuccess()) {
+					throw new HomeInstructionException(uploadResp.getMessage(), Constant.DATABASE_ERROR_CODE);
+				}
+
+				FileUtils.deleteQuietly(pdfFile);
+
+				logger.info("Record submitted successfully for Form1 APHIR.");
+
+				return new Form1AphirResp(true, Constant.getMessageMap().get(Constant.UCF_ASS),
+						utility.responseDate(LocalDateTime.now()), updateForm1DataList.get(0),
+						form1Request.getApplicationId(), uploadResp.getApplicationNo(),
+						uploadResp.getApplicationStatus(), uploadResp.getApplicationStatusAbbrev(),
+						uploadResp.getTransactionId());
+
+			}
+
+		} catch (Exception e) {
+
+			logger.error("Error while updating Form1 APHIR.{}{}", e.getMessage(), e);
+
+			throw new HomeInstructionException(e.getMessage(), "Internal Server Error", e);
+		}
+	}
+
+	@Override
+	@Transactional
+	public Form1AphirResp updateForm1APHIRPhysicianInfo(Form1Request form1Request) { // NOSONAR
+
+		try {
+
+			List<Long> updateForm1DataList = homeInstructionRepo.updateForm1APHIRdata(form1Request);
+
+			if (CollectionUtils.isEmpty(updateForm1DataList) || updateForm1DataList.get(0) <= 0) {
+
+				logger.info("Unable to submit Form1 APHIR.");
+
+				return new Form1AphirResp(false, Constant.getMessageMap().get(Constant.UCF_UUR),
+						utility.responseDate(LocalDateTime.now()), 0L);
+			}
+
+			UpdateHIActivityReq updateHIActivityReq = new UpdateHIActivityReq();
+
+			updateHIActivityReq.setApplicationId(form1Request.getApplicationId());
+			updateHIActivityReq.setActivity(form1Request.getActivity());
+			updateHIActivityReq.setStatus(form1Request.getStatus());
+			updateHIActivityReq.setComment(form1Request.getComment());
+			updateHIActivityReq.setActionTakenBy(form1Request.getLoggedInUserId());
+			updateHIActivityReq.setActionTakenByPersonType(form1Request.getLoggedInUserPersonType());
+
+			List<UpdateHIActivityResp> updateHIActivityResp = applicationListRepo.updateHIActivity(updateHIActivityReq); // NOSONAR
+			return new Form1AphirResp(true, Constant.getMessageMap().get(Constant.UCF_FSD),
+					utility.responseDate(LocalDateTime.now()), updateForm1DataList.get(0),
+					form1Request.getApplicationId(), updateHIActivityResp.get(0).getApplicationNo(),
+					updateHIActivityResp.get(0).getApplicationStatus(),
+					updateHIActivityResp.get(0).getApplicationStatusAbbrev(), null);
+
+		} catch (Exception e) {
+
+			logger.error("Error while updating updateForm1PhycianInfo.{}{}", e.getMessage(), e);
+
+			throw new HomeInstructionException(e.getMessage(), "Internal Server Error", e);
+		}
+	}
+
+	public File generateForm1Pdf(Form1AphirDataResp formData, String formAbbr, String templatePath,
+			String modifiedTemplatePath, String outputPdfPath, List<Form1AphirScheduleResp> scheduleData) {
+
+		try {
+
+			StringBuilder pdfFileLoc = new StringBuilder();
+			pdfFileLoc.append(outputPdfPath);
+			StringBuilder modifiedTemplate = new StringBuilder();
+			modifiedTemplate.append(modifiedTemplatePath);
+			StringBuilder mainHtml = new StringBuilder();
+
+			boolean processReturn = utility.downloadPdfForm(formData, mainHtml, formAbbr, templatePath, scheduleData);
+
+			if (!processReturn) {
+				throw new HomeInstructionException("Unable to generate PDF for form : " + formAbbr,
+						Constant.DATABASE_ERROR_CODE);
+			}
+
+			File modifiedHtmlFile = new File(modifiedTemplate.toString());
+			File pdfFile = new File(pdfFileLoc.toString());
+
+			FileUtils.writeStringToFile(modifiedHtmlFile, mainHtml.toString(), StandardCharsets.UTF_8);
+
+			utility.generatePDF(modifiedHtmlFile.getAbsolutePath(), pdfFile.getAbsolutePath());
+
+			FileUtils.deleteQuietly(modifiedHtmlFile);
+
+			if (!pdfFile.exists() || pdfFile.length() == 0) {
+				throw new HomeInstructionException("PDF generation failed.", Constant.DATABASE_ERROR_CODE);
+			}
+
+			return pdfFile;
+
+		} catch (Exception e) {
+			logger.error("Error while generating PDF for form {}{}", formAbbr, e);
+			throw new HomeInstructionException(e.getMessage(), "Internal Server Error", e);
+		}
+	}
+
+	public File generateForm2Pdf(Form2RHIDTDataResp formData, String formAbbr, String templatePath,
+			String modifiedTemplatePath, String outputPdfPath) {
+
+		try {
+
+			StringBuilder pdfFileLoc = new StringBuilder();
+			pdfFileLoc.append(outputPdfPath);
+			StringBuilder modifiedTemplate = new StringBuilder();
+			modifiedTemplate.append(modifiedTemplatePath);
+			StringBuilder mainHtml = new StringBuilder();
+
+			boolean processReturn = utility.downloadPdfForm(formData, mainHtml, formAbbr, templatePath, null);
+
+			if (!processReturn) {
+				throw new HomeInstructionException("Unable to generate PDF for form : " + formAbbr,
+						Constant.DATABASE_ERROR_CODE);
+			}
+
+			File modifiedHtmlFile = new File(modifiedTemplate.toString());
+			File pdfFile = new File(pdfFileLoc.toString());
+
+			FileUtils.writeStringToFile(modifiedHtmlFile, mainHtml.toString(), StandardCharsets.UTF_8);
+
+			utility.generatePDF(modifiedHtmlFile.getAbsolutePath(), pdfFile.getAbsolutePath());
+
+			FileUtils.deleteQuietly(modifiedHtmlFile);
+
+			if (!pdfFile.exists() || pdfFile.length() == 0) {
+				throw new HomeInstructionException("PDF generation failed.", Constant.DATABASE_ERROR_CODE);
+			}
+
+			return pdfFile;
+
+		} catch (Exception e) {
+			logger.error("Error while generating PDF for form {}{}", formAbbr, e);
+			throw new HomeInstructionException(e.getMessage(), "Internal Server Error", e);
+		}
+	}
+
+	public File generateForm3Pdf(Form3RhiltDataResp formData, String formAbbr, String templatePath,
+			String modifiedTemplatePath, String outputPdfPath) {
+
+		try {
+
+			StringBuilder pdfFileLoc = new StringBuilder();
+			pdfFileLoc.append(outputPdfPath);
+			StringBuilder modifiedTemplate = new StringBuilder();
+			modifiedTemplate.append(modifiedTemplatePath);
+			StringBuilder mainHtml = new StringBuilder();
+
+			boolean processReturn = utility.downloadPdfForm(formData, mainHtml, formAbbr, templatePath, null);
+
+			if (!processReturn) {
+				throw new HomeInstructionException("Unable to generate PDF for form : " + formAbbr,
+						Constant.DATABASE_ERROR_CODE);
+			}
+
+			File modifiedHtmlFile = new File(modifiedTemplate.toString());
+			File pdfFile = new File(pdfFileLoc.toString());
+
+			FileUtils.writeStringToFile(modifiedHtmlFile, mainHtml.toString(), StandardCharsets.UTF_8);
+
+			utility.generatePDF(modifiedHtmlFile.getAbsolutePath(), pdfFile.getAbsolutePath());
+
+			FileUtils.deleteQuietly(modifiedHtmlFile);
+
+			if (!pdfFile.exists() || pdfFile.length() == 0) {
+				throw new HomeInstructionException("PDF generation failed.", Constant.DATABASE_ERROR_CODE);
+			}
+
+			return pdfFile;
+
+		} catch (Exception e) {
+			logger.error("Error while generating PDF for form {}{}", formAbbr, e);
+			throw new HomeInstructionException(e.getMessage(), "Internal Server Error", e);
+		}
+	}
+
+	public File generateForm10Pdf(Form10HSAPPDataResp formData, String formAbbr, String templatePath,
+			String modifiedTemplatePath, String outputPdfPath) {
+
+		try {
+
+			StringBuilder pdfFileLoc = new StringBuilder();
+			pdfFileLoc.append(outputPdfPath);
+			StringBuilder modifiedTemplate = new StringBuilder();
+			modifiedTemplate.append(modifiedTemplatePath);
+			StringBuilder mainHtml = new StringBuilder();
+
+			boolean processReturn = utility.downloadPdfForm(formData, mainHtml, formAbbr, templatePath, null);
+
+			if (!processReturn) {
+				throw new HomeInstructionException("Unable to generate PDF for form : " + formAbbr,
+						Constant.DATABASE_ERROR_CODE);
+			}
+
+			File modifiedHtmlFile = new File(modifiedTemplate.toString());
+			File pdfFile = new File(pdfFileLoc.toString());
+
+			FileUtils.writeStringToFile(modifiedHtmlFile, mainHtml.toString(), StandardCharsets.UTF_8);
+
+			utility.generatePDF(modifiedHtmlFile.getAbsolutePath(), pdfFile.getAbsolutePath());
+
+			FileUtils.deleteQuietly(modifiedHtmlFile);
+
+			if (!pdfFile.exists() || pdfFile.length() == 0) {
+				throw new HomeInstructionException("PDF generation failed.", Constant.DATABASE_ERROR_CODE);
+			}
+
+			return pdfFile;
+
+		} catch (Exception e) {
+			logger.error("Error generating PDF for form {}{}", formAbbr, e);
+			throw new HomeInstructionException(e.getMessage(), "Internal Server Error", e);
+		}
+	}
+
+	@Override
+	public Form1APHIRResponseDTO getForm1ApiHir(Long id, Long applicationId, Long formMasterId, String loggedInUserId,
+			String loggedInUserPersonType, String configKeys, String lookupValues, boolean isStudent) {
+
+		logger.info("Parameter for getForm1ApiHir API ID: \n{}", id);
+
+		try {
+
+			List<LookupDetails> lookupTypeList = new ArrayList<>();
+			if (StringUtils.isNotBlank(lookupValues)) {
+				lookupTypeList = userDetailsRepo.getLookupValues(lookupValues);
+			}
+			Map<String, String> configKeyList = Collections.emptyMap();
+			if (StringUtils.isNotBlank(configKeys)) {
+				configKeyList = utility.getConfigList(configKeys);
+			}
+			List<Form1AphirDataResp> form1AphirDataResp = homeInstructionRepo.getForm1AphirData(id, applicationId,
+					loggedInUserPersonType);
+			Form1APHIRResponseDTO commonResponse = null;
+			List<Form1AphirScheduleResp> scheduleData = homeInstructionRepo.getForm1AphirScheduleData(id);
+			List<StudentDataResp> studentList = new ArrayList<>();
+			if (isStudent) {
+				studentList = appConfigRepo.getStudentData("", loggedInUserId);
+			}
+
+			if (!form1AphirDataResp.isEmpty()) {
+				List<GetPhysicianInfoResp> physcData = homeInstructionRepo
+						.getPhysicianInfoData(form1AphirDataResp.get(0).getApplicationId());
+				List<HIFormTransactionResp> attachmentList = homeInstructionRepo.getHIFormTransactionData(0L,
+						form1AphirDataResp.get(0).getApplicationId(), 0L, loggedInUserPersonType);
+
+				commonResponse = new Form1APHIRResponseDTO(true, Constant.getMessageMap().get(Constant.GFA_RFS),
+						utility.responseDate(LocalDateTime.now()), form1AphirDataResp.get(0), scheduleData,
+						attachmentList, configKeyList, lookupTypeList, studentList, physcData.get(0));
+
+			} else {
+
+				commonResponse = new Form1APHIRResponseDTO(true, Constant.getMessageMap().get(Constant.GFA_RNF),
+						utility.responseDate(LocalDateTime.now()), null, new ArrayList<>(), new ArrayList<>(),
+						configKeyList, lookupTypeList, studentList, new GetPhysicianInfoResp());
+
+			}
+
+			return commonResponse;
+
+		} catch (Exception e) {
+			logger.error("Exception occured while calling getForm1ApiHir data:{} {}", e.getMessage(), e);
+			throw new HomeInstructionException(e.getMessage(), Constant.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	@Override
+	public Form2RHIDTResponseDTO getForm2RHIDT(Long id, Long applicationId, String configKeys, String lookupValues) {
+
+		logger.info("Parameter for getForm2RHIDT API ID: \n{}", id);
+
+		try {
+
+			List<LookupDetails> lookupTypeList = new ArrayList<>();
+			if (StringUtils.isNotBlank(lookupValues)) {
+				lookupTypeList = userDetailsRepo.getLookupValues(lookupValues);
+			}
+			Map<String, String> configKeyList = Collections.emptyMap();
+			if (StringUtils.isNotBlank(configKeys)) {
+				configKeyList = utility.getConfigList(configKeys);
+			}
+			List<Form2RHIDTDataResp> form2AphirDataResp = homeInstructionRepo.getForm2RHIDTData(id, applicationId);
+			Form2RHIDTResponseDTO commonResponse = null;
+
+			if (!form2AphirDataResp.isEmpty()) {
+				List<GetPhysicianInfoResp> physcData = homeInstructionRepo
+						.getPhysicianInfoData(form2AphirDataResp.get(0).getApplicationId());
+
+				commonResponse = new Form2RHIDTResponseDTO(true, Constant.getMessageMap().get(Constant.GFB_RFS),
+						utility.responseDate(LocalDateTime.now()), form2AphirDataResp.get(0), configKeyList,
+						lookupTypeList, physcData.get(0));
+
+			} else {
+
+				commonResponse = new Form2RHIDTResponseDTO(true, Constant.getMessageMap().get(Constant.GFB_RNF),
+						utility.responseDate(LocalDateTime.now()), null, configKeyList, lookupTypeList, null);
+
+			}
+
+			return commonResponse;
+
+		} catch (Exception e) {
+			logger.error("Exception occured while calling getForm2RHIDT data:{}{} ", e.getMessage(), e);
+			throw new HomeInstructionException(e.getMessage(), Constant.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	@Override
+	public Form3RhiltResponseDTO getForm3Rhilt(Long id, Long apllicationId, String configKeys, String lookupValues) {
+
+		logger.info("Parameter for getForm3Rhilt API ID: \n{}", id);
+
+		try {
+
+			List<LookupDetails> lookupTypeList = new ArrayList<>();
+			if (StringUtils.isNotBlank(lookupValues)) {
+				lookupTypeList = userDetailsRepo.getLookupValues(lookupValues);
+			}
+			Map<String, String> configKeyList = Collections.emptyMap();
+			if (StringUtils.isNotBlank(configKeys)) {
+				configKeyList = utility.getConfigList(configKeys);
+			}
+			List<Form3RhiltDataResp> form3AphirDataResp = homeInstructionRepo.getForm3RhiltData(id, apllicationId);
+			Form3RhiltResponseDTO commonResponse = null;
+
+			if (!form3AphirDataResp.isEmpty()) {
+
+				commonResponse = new Form3RhiltResponseDTO(true, Constant.getMessageMap().get(Constant.GFC_RFS),
+						utility.responseDate(LocalDateTime.now()), form3AphirDataResp.get(0), configKeyList,
+						lookupTypeList);
+
+			} else {
+
+				commonResponse = new Form3RhiltResponseDTO(true, Constant.getMessageMap().get(Constant.GFC_RNF),
+						utility.responseDate(LocalDateTime.now()), null, configKeyList, lookupTypeList);
+
+			}
+
+			return commonResponse;
+
+		} catch (Exception e) {
+			logger.error("Exception occured while calling getForm3Rhilt data:{}{} ", e.getMessage(), e);
+			throw new HomeInstructionException(e.getMessage(), Constant.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	@Override
+	public Form4PrthiResponseDTO getForm4Prthi(Long id, Long applicationId, String configKeys, String lookupValues) {
+
+		logger.debug("Parameter for getForm4Prthi API ID: \n{}", id);
+
+		try {
+
+			List<LookupDetails> lookupTypeList = new ArrayList<>();
+			if (StringUtils.isNotBlank(lookupValues)) {
+				lookupTypeList = userDetailsRepo.getLookupValues(lookupValues);
+			}
+			Map<String, String> configKeyList = Collections.emptyMap();
+			if (StringUtils.isNotBlank(configKeys)) {
+				configKeyList = utility.getConfigList(configKeys);
+			}
+			List<Form4PrthiDataResp> form4AphirDataResp = homeInstructionRepo.getForm4PrthiData(id, applicationId);
+			Form4PrthiResponseDTO commonResponse = null;
+
+			if (!form4AphirDataResp.isEmpty()) {
+
+				commonResponse = new Form4PrthiResponseDTO(true, Constant.getMessageMap().get(Constant.GFD_RFS),
+						utility.responseDate(LocalDateTime.now()), form4AphirDataResp.get(0), configKeyList,
+						lookupTypeList);
+
+			} else {
+
+				commonResponse = new Form4PrthiResponseDTO(true, Constant.getMessageMap().get(Constant.GFD_RNF),
+						utility.responseDate(LocalDateTime.now()), null, configKeyList, lookupTypeList);
+
+			}
+
+			return commonResponse;
+
+		} catch (Exception e) {
+			logger.error("Exception occured while calling getForm4Prthi data:{}{} ", e.getMessage(), e);
+			throw new HomeInstructionException(e.getMessage(), Constant.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	@Override
+	public Form630DhiResponseDTO getForm630dhi(Long id, String configKeys, String lookupValues) {
+
+		logger.info("Parameter for getForm630dhi API ID: \n{}", id);
+
+		try {
+
+			List<LookupDetails> lookupTypeList = new ArrayList<>();
+			if (StringUtils.isNotBlank(lookupValues)) {
+				lookupTypeList = userDetailsRepo.getLookupValues(lookupValues);
+			}
+			Map<String, String> configKeyList = Collections.emptyMap();
+			if (StringUtils.isNotBlank(configKeys)) {
+				configKeyList = utility.getConfigList(configKeys);
+			}
+			List<Form630DhiDataResp> form6AphirDataResp = homeInstructionRepo.getForm630dhiData(id);
+			Form630DhiResponseDTO commonResponse = null;
+
+			if (!form6AphirDataResp.isEmpty()) {
+
+				commonResponse = new Form630DhiResponseDTO(true, Constant.getMessageMap().get(Constant.GFE_RFS),
+						utility.responseDate(LocalDateTime.now()), form6AphirDataResp.get(0), configKeyList,
+						lookupTypeList, new ArrayList<>());
+
+			} else {
+
+				commonResponse = new Form630DhiResponseDTO(true, Constant.getMessageMap().get(Constant.GFE_RNF),
+						utility.responseDate(LocalDateTime.now()), null, configKeyList, lookupTypeList,
+						new ArrayList<>());
+
+			}
+
+			return commonResponse;
+
+		} catch (Exception e) {
+			logger.error("Exception occured while calling getForm630dhi data:{}{} ", e.getMessage(), e);
+			throw new HomeInstructionException(e.getMessage(), Constant.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	@Override
+	public Form760DhiResp getForm760Dhi(Long id, String configKeys, String lookupValues) {
+
+		logger.info("Parameter for getForm760Dhi API ID: \n{}", id);
+
+		try {
+
+			List<LookupDetails> lookupTypeList = new ArrayList<>();
+			if (StringUtils.isNotBlank(lookupValues)) {
+				lookupTypeList = userDetailsRepo.getLookupValues(lookupValues);
+			}
+			Map<String, String> configKeyList = Collections.emptyMap();
+			if (StringUtils.isNotBlank(configKeys)) {
+				configKeyList = utility.getConfigList(configKeys);
+			}
+			List<Form760DhiDataResp> form7AphirDataResp = homeInstructionRepo.getForm760DhiData(id);
+			Form760DhiResp commonResponse = null;
+
+			if (!form7AphirDataResp.isEmpty()) {
+
+				commonResponse = new Form760DhiResp(true, Constant.getMessageMap().get(Constant.GFF_RFS),
+						utility.responseDate(LocalDateTime.now()), form7AphirDataResp, lookupTypeList, configKeyList);
+
+			} else {
+
+				commonResponse = new Form760DhiResp(true, Constant.getMessageMap().get(Constant.GFF_RNF),
+						utility.responseDate(LocalDateTime.now()), new ArrayList<>(), lookupTypeList, configKeyList);
+
+			}
+
+			return commonResponse;
+
+		} catch (Exception e) {
+			logger.error("Exception occured while calling getForm760Dhi data:{}{} ", e.getMessage(), e);
+			throw new HomeInstructionException(e.getMessage(), Constant.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	@Override
+	public Form8HiscpResponseDTO getForm8Hiscp(Long id, Long applicationId, String configKeys, String lookupValues) {
+
+		logger.debug("Parameter for getForm8Hiscp API ID: \n{}", id);
+
+		try {
+
+			List<LookupDetails> lookupTypeList = new ArrayList<>();
+			if (StringUtils.isNotBlank(lookupValues)) {
+				lookupTypeList = userDetailsRepo.getLookupValues(lookupValues);
+			}
+			Map<String, String> configKeyList = Collections.emptyMap();
+			if (StringUtils.isNotBlank(configKeys)) {
+				configKeyList = utility.getConfigList(configKeys);
+			}
+			List<Form8HiscpDataResp> form8AphirDataResp = homeInstructionRepo.getForm8HiscpData(id, applicationId);
+			Form8HiscpResponseDTO commonResponse = null;
+
+			if (!form8AphirDataResp.isEmpty()) {
+
+				commonResponse = new Form8HiscpResponseDTO(true, Constant.getMessageMap().get(Constant.GFG_RFS),
+						utility.responseDate(LocalDateTime.now()), form8AphirDataResp.get(0), configKeyList,
+						lookupTypeList);
+
+			} else {
+
+				commonResponse = new Form8HiscpResponseDTO(true, Constant.getMessageMap().get(Constant.GFG_RNF),
+						utility.responseDate(LocalDateTime.now()), null, configKeyList, lookupTypeList);
+
+			}
+
+			return commonResponse;
+
+		} catch (Exception e) {
+			logger.error("Exception occured while calling getForm8Hiscp data:{}{} ", e.getMessage(), e);
+			throw new HomeInstructionException(e.getMessage(), Constant.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	@Override
+	@Transactional
+	public Form2RhidtResp updateForm2Data(Form2Request form2Request) {
+
+		try {
+
+			logger.debug("Request for Form2 RHIDT. {}",
+					utility.printJson(form2Request) != null ? utility.printJson(form2Request) : form2Request);
+
+			Map<String, String> configKeyValuesForF = utility.getConfigList("FILETMPL,TEMPL_PATH");
+			String templatePath = "";
+
+			templatePath = configKeyValuesForF.get("TEMPL_PATH") + File.separator + "HI_APPLN_"
+					+ form2Request.getFormAbbreviation() + ".html";
+
+			List<Long> updateForm2DataList = homeInstructionRepo.updateForm2RHIDTdata(form2Request);
+
+			if (CollectionUtils.isEmpty(updateForm2DataList) || updateForm2DataList.get(0) <= 0) {
+
+				logger.info("Unable to submit Form2 RHIDT.");
+
+				return new Form2RhidtResp(false, Constant.getMessageMap().get(Constant.RHI_UUR),
+						utility.responseDate(LocalDateTime.now()), updateForm2DataList.get(0), new ArrayList<>());
+			}
+
+			List<Form2RHIDTDataResp> form2RHIDTDataResp = homeInstructionRepo
+					.getForm2RHIDTData(updateForm2DataList.get(0), form2Request.getApplicationId());
+
+			if (CollectionUtils.isEmpty(form2RHIDTDataResp)) {
+				logger.debug("Records not found.");
+				throw new HomeInstructionException("Unable to fetch updated Form2 RHIDT data.",
+						Constant.INTERNAL_SERVER_ERROR);
+			}
+
+			String modifiedTemplatePath = configKeyValuesForF.get("FILETMPL") + File.separator + "ModiFied_HI_APPLN_"
+					+ form2Request.getFormAbbreviation() + "_" + form2Request.getApplicationId() + ".html";
+			String temporaryPdfPath = configKeyValuesForF.get("FILETMPL") + File.separator + "HI_APPLN_"
+					+ form2Request.getFormAbbreviation() + "_" + form2Request.getApplicationId() + ".pdf";
+
+			File pdfFile = generateForm2Pdf(form2RHIDTDataResp.get(0), form2Request.getFormAbbreviation(), templatePath, // NOSONAR
+					modifiedTemplatePath, temporaryPdfPath);
+
+			MultipartFile multipartFile = utility.convertFileToMultipartFile(new File(temporaryPdfPath));
+
+			UploadFormDocumentReq uploadReq = new UploadFormDocumentReq();
+
+			uploadReq.setIndicator("I");
+			uploadReq.setId(0);
+			uploadReq.setStudentId(form2Request.getStudentId());
+			uploadReq.setSchoolYear(form2Request.getSchoolYear());
+			uploadReq.setApplicationType("");
+			uploadReq.setSchoolCode("");
+			uploadReq.setGradeId(0);
+			uploadReq.setRequestDate("");
+			uploadReq.setClassification("");
+			uploadReq.setActivity(form2Request.getActivity());
+			uploadReq.setStatus(form2Request.getStatus());
+			uploadReq.setComment(form2Request.getComment());
+			uploadReq.setApplicationId(form2Request.getApplicationId());
+			uploadReq.setFormMasterId(form2Request.getFormMasterId());
+			uploadReq.setOtherDocumentName(form2Request.getOtherDocumentName());
+			uploadReq.setUploadedGeneratedTag("S");
+			uploadReq.setOriginalFileName(FilenameUtils.getName(temporaryPdfPath));
+			uploadReq.setUploadedBy(form2Request.getLoggedInUserId());
+			uploadReq.setUploadPersonType(form2Request.getLoggedInUserPersonType());
+
+			FileUploadResp uploadResp = fileUploadService.uploadAndParseFile(multipartFile, uploadReq);
+
+			if (!uploadResp.isSuccess()) {
+				logger.debug("Unable to upload the file");
+				throw new HomeInstructionException(uploadResp.getMessage(), Constant.INTERNAL_SERVER_ERROR);
+			}
+
+			FileUtils.deleteQuietly(pdfFile);
+
+			logger.info("Record submitted successfully for Form2 RHIDT.");
+
+			List<HIFormTransactionResp> attachmentList = homeInstructionRepo.getHIFormTransactionData(0L,
+					form2Request.getApplicationId(), 0L, form2Request.getLoggedInUserPersonType());
+
+			return new Form2RhidtResp(true, Constant.getMessageMap().get(Constant.RHI_TRSS),
+					utility.responseDate(LocalDateTime.now()), updateForm2DataList.get(0), attachmentList);
+
+		} catch (Exception e) {
+
+			logger.error("Error while updating Form2 RHIDT. {}{}", e.getMessage(), e);
+
+			throw new HomeInstructionException(e.getMessage(), "Internal Server Error", e);
+		}
+	}
+
+	@Override
+	@Transactional
+	public Form3RhiltResp updateForm3Data(Form3Request form3Request) {
+
+		try {
+
+			logger.debug("Request for Form3 RHILT. {}",
+					utility.printJson(form3Request) != null ? utility.printJson(form3Request) : form3Request);
+
+			Map<String, String> configKeyValuesForF = utility.getConfigList("FILETMPL,TEMPL_PATH");
+
+			String templatePath = configKeyValuesForF.get("TEMPL_PATH") + File.separator + "HI_APPLN_"// NOSONAR
+					+ form3Request.getFormAbbreviation() + ".html";
+
+			List<Long> updateForm3DataList = homeInstructionRepo.updateForm3RHILTdata(form3Request);
+
+			if (CollectionUtils.isEmpty(updateForm3DataList) || updateForm3DataList.get(0) <= 0) {
+
+				logger.info("Unable to submit 3 RHILT.");
+
+				return new Form3RhiltResp(false, Constant.getMessageMap().get(Constant.RHID_UUR),
+						utility.responseDate(LocalDateTime.now()), updateForm3DataList.get(0), null);
+			}
+
+			List<Form3RhiltDataResp> form3RHILTDataResp = homeInstructionRepo
+					.getForm3RhiltData(updateForm3DataList.get(0), form3Request.getApplicationId());
+
+			if (CollectionUtils.isEmpty(form3RHILTDataResp)) {
+				throw new HomeInstructionException("Unable to fetch updated Form3 RHILT data.",
+						Constant.INTERNAL_SERVER_ERROR);
+			}
+
+			String modifiedTemplatePath = configKeyValuesForF.get("FILETMPL") + File.separator + "ModiFied_HI_APPLN_"
+					+ form3Request.getFormAbbreviation() + "_" + form3Request.getApplicationId() + ".html";
+
+			String temporaryPdfPath = configKeyValuesForF.get("FILETMPL") + File.separator + "HI_APPLN_"
+					+ form3Request.getFormAbbreviation() + "_" + form3Request.getApplicationId() + ".pdf";
+
+			File pdfFile = generateForm3Pdf(form3RHILTDataResp.get(0), form3Request.getFormAbbreviation(), templatePath, // NOSONAR
+					modifiedTemplatePath, temporaryPdfPath);
+
+			MultipartFile multipartFile = utility.convertFileToMultipartFile(new File(temporaryPdfPath));
+
+			UploadFormDocumentReq uploadReq = new UploadFormDocumentReq();
+
+			uploadReq.setIndicator("I");
+			uploadReq.setId(0);
+			uploadReq.setStudentId(form3Request.getStudentId());
+			uploadReq.setSchoolYear(form3Request.getSchoolYear());
+			uploadReq.setApplicationType("");
+			uploadReq.setSchoolCode("");
+			uploadReq.setGradeId(0);
+			uploadReq.setRequestDate("");
+			uploadReq.setClassification("");
+			uploadReq.setActivity(form3Request.getActivity());
+			uploadReq.setStatus(form3Request.getStatus());
+			uploadReq.setComment(form3Request.getComment());
+			uploadReq.setApplicationId(form3Request.getApplicationId());
+			uploadReq.setFormMasterId(form3Request.getFormMasterId());
+			uploadReq.setOtherDocumentName(form3Request.getOtherDocumentName());
+			uploadReq.setUploadedGeneratedTag("S");
+			uploadReq.setOriginalFileName(FilenameUtils.getName(temporaryPdfPath));
+			uploadReq.setUploadedBy(form3Request.getLoggedInUserId());
+			uploadReq.setUploadPersonType(form3Request.getLoggedInUserPersonType());
+
+			FileUploadResp uploadResp = fileUploadService.uploadAndParseFile(multipartFile, uploadReq);
+
+			if (!uploadResp.isSuccess()) {
+				throw new HomeInstructionException(uploadResp.getMessage(), Constant.INTERNAL_SERVER_ERROR);
+			}
+
+			FileUtils.deleteQuietly(pdfFile);
+
+			logger.info("Record submitted successfully for Form3 RHILT.");
+
+			List<HIFormTransactionResp> attachmentList = homeInstructionRepo.getHIFormTransactionData(0L,
+					form3Request.getApplicationId(), 0L, form3Request.getLoggedInUserPersonType());
+
+			return new Form3RhiltResp(true, Constant.getMessageMap().get(Constant.RHID_RUS),
+					utility.responseDate(LocalDateTime.now()), updateForm3DataList.get(0), attachmentList);
+
+		} catch (Exception e) {
+
+			logger.error("Error while updating Form3 RHILT. {}{}", e.getMessage(), e);
+
+			throw new HomeInstructionException(e.getMessage(), "Internal Server Error", e);
+		}
+	}
+
+	@Override
+	@Transactional
+	public Form10HSAPPResponseDTO updateForm10Data(Form10Request form10Request) {
+
+		try {
+
+			logger.debug("Request for Form10 HSAPP. {}",
+					utility.printJson(form10Request) != null ? utility.printJson(form10Request) : form10Request);
+
+			Map<String, String> configKeyValuesForF = utility.getConfigList("FILETMPL,TEMPL_PATH");
+			String templatePath = "";
+
+			templatePath = configKeyValuesForF.get("TEMPL_PATH") + File.separator + "HI_APPLN_"
+					+ form10Request.getFormAbbreviation() + ".html";
+
+			UserInfoReq userInfoReq = new UserInfoReq(form10Request.getIndicator(), form10Request.getLoggedInUserId(),
+					"TCHR", "", "");
+
+			List<Long> updatedUserId = userDetailsRepo.updateuserInfoData(userInfoReq);
+
+			form10Request.setLoggedInUserId(AES.encrypt(String.valueOf(updatedUserId.get(0)), Constant.SALT_AES));
+
+			List<Long> updateForm10DataList = homeInstructionRepo.updateForm10HSAPPdata(form10Request);
+
+			if (CollectionUtils.isEmpty(updateForm10DataList) || updateForm10DataList.get(0) <= 0) {
+
+				logger.info("Unable to submit Form10 HSAPP.");
+
+				return new Form10HSAPPResponseDTO(false, Constant.getMessageMap().get(Constant.RHI_UUR),
+						utility.responseDate(LocalDateTime.now()), null, null, null, new ArrayList<>());
+			}
+
+			List<Form10HSAPPDataResp> form10RHIDTDataResp = homeInstructionRepo
+					.getForm10HSAPPData(updateForm10DataList.get(0), form10Request.getApplicationId());
+
+			if (CollectionUtils.isEmpty(form10RHIDTDataResp)) {
+				throw new HomeInstructionException("Unable to fetch updated Form10 HSAPP data.",
+						Constant.INTERNAL_SERVER_ERROR);
+			}
+
+			String modifiedTemplatePath = configKeyValuesForF.get("FILETMPL") + File.separator + "ModiFied_HI_APPLN_"
+					+ form10Request.getFormAbbreviation() + "_" + form10Request.getApplicationId() + ".html";
+			String temporaryPdfPath = configKeyValuesForF.get("FILETMPL") + File.separator + "HI_APPLN_"
+					+ form10Request.getFormAbbreviation() + "_" + form10Request.getApplicationId() + ".pdf";
+
+			File pdfFile = generateForm10Pdf(form10RHIDTDataResp.get(0), form10Request.getFormAbbreviation(), // NOSONAR
+					templatePath, modifiedTemplatePath, temporaryPdfPath);
+
+			MultipartFile multipartFile = utility.convertFileToMultipartFile(new File(temporaryPdfPath));
+
+			UploadFormDocumentReq uploadReq = new UploadFormDocumentReq();
+
+			uploadReq.setIndicator("I");
+			uploadReq.setId(0);
+			uploadReq.setStudentId(form10Request.getStudentId());
+			uploadReq.setSchoolYear(form10Request.getSchoolYear());
+			uploadReq.setApplicationType("");
+			uploadReq.setSchoolCode("");
+			uploadReq.setGradeId(0);
+			uploadReq.setRequestDate("");
+			uploadReq.setClassification("");
+			uploadReq.setActivity(form10Request.getActivity());
+			uploadReq.setStatus(form10Request.getStatus());
+			uploadReq.setComment(form10Request.getComment());
+			uploadReq.setApplicationId(form10Request.getApplicationId());
+			uploadReq.setFormMasterId(form10Request.getFormMasterId());
+			uploadReq.setUploadedGeneratedTag("S");
+			uploadReq.setOriginalFileName(FilenameUtils.getName(temporaryPdfPath));
+			uploadReq.setUploadedBy(form10Request.getLoggedInUserId());
+			uploadReq.setUploadPersonType(form10Request.getLoggedInUserPersonType());
+
+			FileUploadResp uploadResp = fileUploadService.uploadAndParseFile(multipartFile, uploadReq);
+
+			if (!uploadResp.isSuccess()) {
+				throw new HomeInstructionException(uploadResp.getMessage(), Constant.INTERNAL_SERVER_ERROR);
+			}
+
+			FileUtils.deleteQuietly(pdfFile);
+			List<HIFormTransactionResp> attachmentList = homeInstructionRepo.getHIFormTransactionData(0L,
+					form10Request.getApplicationId(), 0L, form10Request.getLoggedInUserPersonType());
+
+			logger.info("Record submitted successfully for Form10 HSAPP.");
+
+			return new Form10HSAPPResponseDTO(true, Constant.getMessageMap().get(Constant.RHI_RUS),
+					utility.responseDate(LocalDateTime.now()), form10RHIDTDataResp.get(0), null, null, attachmentList);
+
+		} catch (Exception e) {
+
+			logger.error("Error while updating Form10 HSAPP. {}", e.getMessage());
+
+			throw new HomeInstructionException(e.getMessage(), "Internal Server Error", e);
+		}
+	}
+
+	@Override
+	@Transactional
+	public Form4PrthiResp updateForm4Data(Form4Request form4Request) {
+		try {
+
+			logger.debug("Request for Form 4 PRTHI. {}",
+					utility.printJson(form4Request) != null ? utility.printJson(form4Request) : form4Request);
+
+			Map<String, String> configKeyValuesForF = utility.getConfigList("FILETMPL,TEMPL_PATH");
+
+			String templatePath = configKeyValuesForF.get("TEMPL_PATH") + File.separator + "HI_APPLN_"// NOSONAR
+					+ form4Request.getFormAbbreviation() + ".html";
+
+			List<Long> updateForm4DataList = homeInstructionRepo.updateForm4PRTHIdata(form4Request);
+
+			if (CollectionUtils.isEmpty(updateForm4DataList) || updateForm4DataList.get(0) <= 0) {
+
+				logger.info("Unable to submit Form 4 PRTHI.");
+
+				return new Form4PrthiResp(false, Constant.getMessageMap().get(Constant.PRIT_UUR),
+						utility.responseDate(LocalDateTime.now()), updateForm4DataList.get(0), new ArrayList<>());
+			}
+
+			List<Form4PrthiDataResp> form4RHILTDataResp = homeInstructionRepo
+					.getForm4PrthiData(updateForm4DataList.get(0), form4Request.getApplicationId());
+			if (CollectionUtils.isEmpty(form4RHILTDataResp)) {
+				throw new HomeInstructionException("Unable to fetch updated Form 4 PRTHI data.",
+						Constant.INTERNAL_SERVER_ERROR);
+			}
+
+			String modifiedTemplatePath = configKeyValuesForF.get("FILETMPL") + File.separator + "ModiFied_HI_APPLN_"
+					+ form4Request.getFormAbbreviation() + "_" + form4Request.getApplicationId() + ".html";
+
+			String temporaryPdfPath = configKeyValuesForF.get("FILETMPL") + File.separator + "HI_APPLN_"
+					+ form4Request.getFormAbbreviation() + "_" + form4Request.getApplicationId() + ".pdf";
+
+			File pdfFile = generateForm4Pdf(form4RHILTDataResp.get(0), form4Request.getFormAbbreviation(), templatePath, // NOSONAR
+					modifiedTemplatePath, temporaryPdfPath);
+
+			MultipartFile multipartFile = utility.convertFileToMultipartFile(new File(temporaryPdfPath));
+
+			UploadFormDocumentReq uploadReq = new UploadFormDocumentReq();
+
+			uploadReq.setIndicator("I");
+			uploadReq.setId(0);
+			uploadReq.setStudentId(form4Request.getStudentId());
+			uploadReq.setSchoolYear(form4Request.getSchoolYear());
+			uploadReq.setApplicationType("");
+			uploadReq.setSchoolCode("");
+			uploadReq.setGradeId(0);
+			uploadReq.setRequestDate("");
+			uploadReq.setClassification("");
+			uploadReq.setActivity(form4Request.getActivity());
+			uploadReq.setStatus(form4Request.getStatus());
+			uploadReq.setComment(form4Request.getComment());
+			uploadReq.setApplicationId(form4Request.getApplicationId());
+			uploadReq.setFormMasterId(form4Request.getFormMasterId());
+			uploadReq.setUploadedGeneratedTag("S");
+			uploadReq.setOriginalFileName(FilenameUtils.getName(temporaryPdfPath));
+			uploadReq.setUploadedBy(form4Request.getLoggedInUserId());
+			uploadReq.setUploadPersonType(form4Request.getLoggedInUserPersonType());
+
+			FileUploadResp uploadResp = fileUploadService.uploadAndParseFile(multipartFile, uploadReq);
+
+			if (!uploadResp.isSuccess()) {
+				logger.debug("Unable to upload the file in file folder or s3.");
+				throw new HomeInstructionException(uploadResp.getMessage(), Constant.INTERNAL_SERVER_ERROR);
+			}
+
+			FileUtils.deleteQuietly(pdfFile);
+
+			logger.info("Record submitted successfully for Form 4 PRTHI.");
+			List<HIFormTransactionResp> attachmentList = homeInstructionRepo.getHIFormTransactionData(0L,
+					form4Request.getApplicationId(), 0L, form4Request.getLoggedInUserPersonType());
+
+			return new Form4PrthiResp(true, Constant.getMessageMap().get(Constant.PRIT_RUS),
+					utility.responseDate(LocalDateTime.now()), updateForm4DataList.get(0), attachmentList);
+
+		} catch (Exception e) {
+
+			logger.error("Error occured while updating Form 4 PRTHI. {}{}", e.getMessage(), e);
+
+			throw new HomeInstructionException(e.getMessage(), "Internal Server Error", e);
+		}
+	}
+
+	public File generateForm4Pdf(Form4PrthiDataResp formData, String formAbbr, String templatePath,
+			String modifiedTemplatePath, String outputPdfPath) {
+
+		try {
+
+			StringBuilder pdfFileLoc = new StringBuilder();
+			pdfFileLoc.append(outputPdfPath);
+			StringBuilder modifiedTemplate = new StringBuilder();
+			modifiedTemplate.append(modifiedTemplatePath);
+			StringBuilder mainHtml = new StringBuilder();
+
+			boolean processReturn = utility.downloadPdfForm(formData, mainHtml, formAbbr, templatePath, null);
+
+			if (!processReturn) {
+				throw new HomeInstructionException("Unable to generate PDF for form : " + formAbbr,
+						Constant.INTERNAL_SERVER_ERROR);
+			}
+
+			File modifiedHtmlFile = new File(modifiedTemplate.toString());
+			File pdfFile = new File(pdfFileLoc.toString());
+
+			FileUtils.writeStringToFile(modifiedHtmlFile, mainHtml.toString(), StandardCharsets.UTF_8);
+
+			utility.generatePDF(modifiedHtmlFile.getAbsolutePath(), pdfFile.getAbsolutePath());
+
+			FileUtils.deleteQuietly(modifiedHtmlFile);
+
+			if (!pdfFile.exists() || pdfFile.length() == 0) {
+				throw new HomeInstructionException("PDF generation failed.", Constant.INTERNAL_SERVER_ERROR);
+			}
+
+			return pdfFile;
+
+		} catch (Exception e) {
+			logger.error("Error generating PDF for form {}", formAbbr, e);
+			throw new HomeInstructionException(e.getMessage(), "Internal Server Error", e);
+		}
+	}
+
+	public File generateForm8Pdf(Form8HiscpDataResp formData, String formAbbr, String templatePath,
+			String modifiedTemplatePath, String outputPdfPath) {
+
+		try {
+
+			StringBuilder pdfFileLoc = new StringBuilder();
+			pdfFileLoc.append(outputPdfPath);
+			StringBuilder modifiedTemplate = new StringBuilder();
+			modifiedTemplate.append(modifiedTemplatePath);
+			StringBuilder mainHtml = new StringBuilder();
+
+			boolean processReturn = utility.downloadPdfForm(formData, mainHtml, formAbbr, templatePath, null);
+
+			if (!processReturn) {
+				throw new HomeInstructionException("Unable to generate PDF for form : " + formAbbr,
+						Constant.INTERNAL_SERVER_ERROR);
+			}
+
+			File modifiedHtmlFile = new File(modifiedTemplate.toString());
+			File pdfFile = new File(pdfFileLoc.toString());
+
+			FileUtils.writeStringToFile(modifiedHtmlFile, mainHtml.toString(), StandardCharsets.UTF_8);
+
+			utility.generatePDF(modifiedHtmlFile.getAbsolutePath(), pdfFile.getAbsolutePath());
+
+			FileUtils.deleteQuietly(modifiedHtmlFile);
+
+			if (!pdfFile.exists() || pdfFile.length() == 0) {
+				throw new HomeInstructionException("PDF generation failed.", Constant.INTERNAL_SERVER_ERROR);
+			}
+
+			return pdfFile;
+
+		} catch (Exception e) {
+			logger.error("Error generating PDF for form {}{}", formAbbr, e);
+			throw new HomeInstructionException(e.getMessage(), "Internal Server Error", e);
+		}
+	}
+
+	@Override
+	@Transactional
+	public Form9EAPPResp updateForm9Data(Form9Request form9ERequest) {
+		try {
+
+			logger.debug("Request for Form 9 EAPP. {}",
+					utility.printJson(form9ERequest) != null ? utility.printJson(form9ERequest) : form9ERequest);
+
+			Map<String, String> configKeyValuesForF = utility.getConfigList("FILETMPL,TEMPL_PATH");
+
+			String templatePath = configKeyValuesForF.get("TEMPL_PATH") + File.separator + "HI_APPLN_"// NOSONAR
+					+ form9ERequest.getFormAbbreviation() + ".html";
+
+			UserInfoReq userInfoReq = new UserInfoReq(form9ERequest.getIndicator(), form9ERequest.getLoggedInUserId(),
+					"TCHR", "", "");
+
+			List<Long> updatedUserId = userDetailsRepo.updateuserInfoData(userInfoReq);
+
+			form9ERequest.setLoggedInUserId(AES.encrypt(String.valueOf(updatedUserId.get(0)), Constant.SALT_AES));
+
+			List<Long> updateForm9DataList = homeInstructionRepo.updateForm9EAPPData(form9ERequest);
+
+			if (CollectionUtils.isEmpty(updateForm9DataList) || updateForm9DataList.get(0) <= 0) {
+
+				logger.info("Unable to submit Form 9 EAPP.");
+
+				return new Form9EAPPResp(false, Constant.getMessageMap().get(Constant.PRIT_UUR),
+						utility.responseDate(LocalDateTime.now()), updateForm9DataList.get(0), new ArrayList<>());
+			}
+
+			List<Form9EAPPDataResp> form9EAPPDataResp = homeInstructionRepo.getForm9EAPPData(updateForm9DataList.get(0),
+					form9ERequest.getApplicationId());
+			if (CollectionUtils.isEmpty(form9EAPPDataResp)) {
+				throw new HomeInstructionException("Unable to fetch updated Form 9 EAPP data.",
+						Constant.INTERNAL_SERVER_ERROR);
+			}
+
+			String modifiedTemplatePath = configKeyValuesForF.get("FILETMPL") + File.separator + "ModiFied_HI_APPLN_"
+					+ form9ERequest.getFormAbbreviation() + "_" + form9ERequest.getApplicationId() + ".html";
+
+			String temporaryPdfPath = configKeyValuesForF.get("FILETMPL") + File.separator + "HI_APPLN_"
+					+ form9ERequest.getFormAbbreviation() + "_" + form9ERequest.getApplicationId() + ".pdf";
+
+			File pdfFile = generateForm9Pdf(form9EAPPDataResp.get(0), form9ERequest.getFormAbbreviation(), templatePath, // NOSONAR
+					modifiedTemplatePath, temporaryPdfPath);
+
+			MultipartFile multipartFile = utility.convertFileToMultipartFile(new File(temporaryPdfPath));
+
+			UploadFormDocumentReq uploadReq = new UploadFormDocumentReq();
+
+			uploadReq.setIndicator("I");
+			uploadReq.setId(0);
+			uploadReq.setStudentId(form9ERequest.getStudentId());
+			uploadReq.setSchoolYear(form9ERequest.getSchoolYear());
+			uploadReq.setApplicationType("");
+			uploadReq.setSchoolCode("");
+			uploadReq.setGradeId(0);
+			uploadReq.setRequestDate("");
+			uploadReq.setClassification("");
+			uploadReq.setActivity(form9ERequest.getActivity());
+			uploadReq.setStatus(form9ERequest.getStatus());
+			uploadReq.setComment(form9ERequest.getComment());
+			uploadReq.setApplicationId(form9ERequest.getApplicationId());
+			uploadReq.setFormMasterId(form9ERequest.getFormMasterId());
+			uploadReq.setUploadedGeneratedTag("S");
+			uploadReq.setOriginalFileName(FilenameUtils.getName(temporaryPdfPath));
+			uploadReq.setUploadedBy(form9ERequest.getLoggedInUserId());
+			uploadReq.setUploadPersonType(form9ERequest.getLoggedInUserPersonType());
+
+			FileUploadResp uploadResp = fileUploadService.uploadAndParseFile(multipartFile, uploadReq);
+
+			if (!uploadResp.isSuccess()) {
+				throw new HomeInstructionException(uploadResp.getMessage(), Constant.INTERNAL_SERVER_ERROR);
+			}
+
+			FileUtils.deleteQuietly(pdfFile);
+
+			List<HIFormTransactionResp> attachmentList = homeInstructionRepo.getHIFormTransactionData(0L,
+					form9ERequest.getApplicationId(), 0L, form9ERequest.getLoggedInUserPersonType());
+
+			logger.info("Record submitted successfully for Form 9 EAPP.");
+
+			return new Form9EAPPResp(true, Constant.getMessageMap().get(Constant.PRIT_RUS),
+					utility.responseDate(LocalDateTime.now()), updateForm9DataList.get(0), attachmentList);
+
+		} catch (Exception e) {
+
+			logger.error("Error while updating Form 9 EAPP. {}{}", e.getMessage(), e);
+
+			throw new HomeInstructionException(e.getMessage(), "Internal Server Error", e);
+		}
+	}
+
+	public String tableBodyReplace(String mainHtml, List<Form9EAPPPlanDataResp> planDataList) {
+
+		try {
+			String html = mainHtml;
+
+			if (html == null) {
+				return null;
+			}
+
+			String rowTemplate = StringUtils.substringBetween(html, "{ROW_START}", "{ROW_END}");
+
+			StringBuilder scheduleRows = new StringBuilder();
+
+			if (html != null && planDataList != null && !planDataList.isEmpty()) {
+
+				for (Form9EAPPPlanDataResp tableData : planDataList) {
+
+					Map<String, String> rowReplacers = new HashMap<>();
+
+					rowReplacers.put("{plan_type}", StringUtils.defaultString(tableData.getPlanType(), ""));
+					rowReplacers.put("{plan_1}", StringUtils.defaultString(tableData.getPlan1(), ""));
+					rowReplacers.put("{plan_2}", StringUtils.defaultString(tableData.getPlan2(), ""));
+
+					scheduleRows.append(utility.replaceString(rowReplacers, rowTemplate));
+				}
+			}
+
+			html = html.replace("{ROW_START}" + rowTemplate + "{ROW_END}", scheduleRows.toString());
+
+			return html;
+
+		} catch (Exception e) { // NOSONAR
+			logger.error("Exception occured while fetching data:{}{}", e.getMessage(), e);
+			throw new HomeInstructionException(e.getMessage(), Constant.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	public File generateForm9Pdf(Form9EAPPDataResp formData, String formAbbr, String templatePath,
+			String modifiedTemplatePath, String outputPdfPath) {
+
+		try {
+
+			StringBuilder pdfFileLoc = new StringBuilder();
+			pdfFileLoc.append(outputPdfPath);
+			StringBuilder modifiedTemplate = new StringBuilder();
+			modifiedTemplate.append(modifiedTemplatePath);
+			StringBuilder mainHtml = new StringBuilder();
+
+			boolean processReturn = utility.downloadPdfForm(formData, mainHtml, formAbbr, templatePath, null);
+
+			if (!processReturn) {
+				throw new HomeInstructionException("Unable to generate PDF for form : " + formAbbr,
+						Constant.INTERNAL_SERVER_ERROR);
+			}
+
+			File modifiedHtmlFile = new File(modifiedTemplate.toString());
+			File pdfFile = new File(pdfFileLoc.toString());
+
+			FileUtils.writeStringToFile(modifiedHtmlFile, mainHtml.toString(), StandardCharsets.UTF_8);
+
+			utility.generatePDF(modifiedHtmlFile.getAbsolutePath(), pdfFile.getAbsolutePath());
+
+			FileUtils.deleteQuietly(modifiedHtmlFile);
+
+			if (!pdfFile.exists() || pdfFile.length() == 0) {
+				throw new HomeInstructionException("PDF generation failed.", Constant.INTERNAL_SERVER_ERROR);
+			}
+
+			return pdfFile;
+
+		} catch (Exception e) {
+			logger.error("Error generating PDF for form {}{}", formAbbr, e);
+			throw new HomeInstructionException(e.getMessage(), "Internal Server Error", e);
+		}
+	}
+
+	@Override
+	public Form9EAPPResponseDTO getForm9EAPP(Long id, Long applicationId, String configKeys, String lookupValues) {
+
+		logger.debug("Parameter for getForm9EAPP API ID: {}\n applicationId: {}", id, applicationId);
+
+		try {
+
+			List<LookupDetails> lookupTypeList = new ArrayList<>();
+			if (StringUtils.isNotBlank(lookupValues)) {
+				lookupTypeList = userDetailsRepo.getLookupValues(lookupValues);
+			}
+			Map<String, String> configKeyList = Collections.emptyMap();
+			if (StringUtils.isNotBlank(configKeys)) {
+				configKeyList = utility.getConfigList(configKeys);
+			}
+			List<Form9EAPPDataResp> form9EAPPDataResp = homeInstructionRepo.getForm9EAPPData(id, applicationId);
+			Form9EAPPResponseDTO commonResponse = null;
+
+			if (!form9EAPPDataResp.isEmpty()) {
+
+				commonResponse = new Form9EAPPResponseDTO(true, Constant.getMessageMap().get(Constant.EAP_RFS),
+						utility.responseDate(LocalDateTime.now()), form9EAPPDataResp.get(0), configKeyList,
+						lookupTypeList);
+
+			} else {
+
+				commonResponse = new Form9EAPPResponseDTO(true, Constant.getMessageMap().get(Constant.EAP_RNF),
+						utility.responseDate(LocalDateTime.now()), null, configKeyList, lookupTypeList);
+
+			}
+
+			return commonResponse;
+
+		} catch (Exception e) {
+			logger.error("Exception occured while calling getForm9EAPP data:{} ", e.getMessage());
+			throw new HomeInstructionException(e.getMessage(), Constant.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	@Override
+	@Transactional
+	public Form630DHIResp updateForm630DHIData(Form630DHIRequest form630DHIRequest) {
+
+		try {
+
+			logger.debug("Update Request for Form6 30DHI. {}",
+					utility.printJson(form630DHIRequest) != null ? utility.printJson(form630DHIRequest)
+							: form630DHIRequest);
+
+			Map<String, String> configKeyValuesForF = utility.getConfigList("FILETMPL,TEMPL_PATH");
+			String templatePath = "";
+
+			templatePath = configKeyValuesForF.get("TEMPL_PATH") + File.separator + "HI_APPLN_"
+					+ form630DHIRequest.getFormAbbreviation() + ".html";
+
+			List<ApplicationInfoResp> appInfoData = homeInstructionRepo.getApplicationInfoData(
+					form630DHIRequest.getApplicationId(), form630DHIRequest.getLoggedInUserPersonType());
+
+			List<GetPhysicianInfoResp> physcData = homeInstructionRepo
+					.getPhysicianInfoData(form630DHIRequest.getApplicationId());
+			Form630DhiDataResp data = new Form630DhiDataResp();
+
+			data.setStudentId(appInfoData.get(0).getStudentId());
+			data.setStudentName(appInfoData.get(0).getStudentName());
+			data.setNoticeDate(form630DHIRequest.getNoticeDate());
+			data.setNurseName(form630DHIRequest.getNurseName());
+			data.setStudentGrade(appInfoData.get(0).getStudentGrade());
+			data.setPhysicianName(physcData.get(0).getPhysicianName());
+			data.setPhysicianVerifiedOn(physcData.get(0).getPhysicianSignDate());
+
+			List<Long> updateForm630DHIDataList = homeInstructionRepo.updateForm30DHIdata(form630DHIRequest, physcData);
+
+			if (CollectionUtils.isEmpty(updateForm630DHIDataList) || updateForm630DHIDataList.get(0) <= 0) {
+
+				logger.info("Unable to submit Form6 30DHI.");
+
+				return new Form630DHIResp(false, Constant.getMessageMap().get(Constant.RHI_NSF),
+						utility.responseDate(LocalDateTime.now()), new ArrayList<>());
+			}
+
+			String modifiedTemplatePath = configKeyValuesForF.get("FILETMPL") + File.separator + "ModiFied_HI_APPLN_"
+					+ form630DHIRequest.getFormAbbreviation() + "_" + form630DHIRequest.getApplicationId() + ".html";
+			String temporaryPdfPath = configKeyValuesForF.get("FILETMPL") + File.separator + "HI_APPLN_"
+					+ form630DHIRequest.getFormAbbreviation() + "_" + form630DHIRequest.getApplicationId() + ".pdf";
+
+			File pdfFile = generateForm6Pdf(data, form630DHIRequest.getFormAbbreviation(), // NOSONAR
+					templatePath, modifiedTemplatePath, temporaryPdfPath);
+
+			MultipartFile multipartFile = utility.convertFileToMultipartFile(new File(temporaryPdfPath));
+
+			UploadFormDocumentReq uploadReq = new UploadFormDocumentReq();
+
+			uploadReq.setIndicator("I");
+			uploadReq.setId(0);
+			uploadReq.setStudentId(form630DHIRequest.getStudentId());
+			uploadReq.setSchoolYear(form630DHIRequest.getSchoolYear());
+			uploadReq.setApplicationType("");
+			uploadReq.setSchoolCode("");
+			uploadReq.setGradeId(0);
+			uploadReq.setRequestDate("");
+			uploadReq.setClassification("");
+			uploadReq.setActivity(form630DHIRequest.getActivity());
+			uploadReq.setStatus(form630DHIRequest.getStatus());
+			uploadReq.setComment(form630DHIRequest.getComment());
+			uploadReq.setApplicationId(form630DHIRequest.getApplicationId());
+			uploadReq.setFormMasterId(form630DHIRequest.getFormMasterId());
+			uploadReq.setUploadedGeneratedTag("S");
+			uploadReq.setOriginalFileName(FilenameUtils.getName(temporaryPdfPath));
+			uploadReq.setUploadedBy(form630DHIRequest.getLoggedInUserId());
+			uploadReq.setUploadPersonType(form630DHIRequest.getLoggedInUserPersonType());
+
+			FileUploadResp uploadResp = fileUploadService.uploadAndParseFile(multipartFile, uploadReq);
+
+			if (!uploadResp.isSuccess()) {
+				throw new HomeInstructionException(uploadResp.getMessage(), Constant.INTERNAL_SERVER_ERROR);
+			}
+
+			FileUtils.deleteQuietly(pdfFile);
+
+			logger.info("Record submitted successfully for Form2 RHIDT.");
+			List<HIFormTransactionResp> attachmentList = homeInstructionRepo.getHIFormTransactionData(0L,
+					form630DHIRequest.getApplicationId(), 0L, form630DHIRequest.getLoggedInUserPersonType());
+
+			return new Form630DHIResp(true, Constant.getMessageMap().get(Constant.RHI_NSS),
+					utility.responseDate(LocalDateTime.now()), attachmentList);
+
+		} catch (Exception e) {
+
+			logger.error("Error while updating Form2 RHIDT. {}", e.getMessage());
+
+			throw new HomeInstructionException(e.getMessage(), "Internal Server Error", e);
+		}
+	}
+
+	public File generateForm6Pdf(Form630DhiDataResp formData, String formAbbr, String templatePath,
+			String modifiedTemplatePath, String outputPdfPath) {
+
+		try {
+
+			StringBuilder pdfFileLoc = new StringBuilder();
+			pdfFileLoc.append(outputPdfPath);
+			StringBuilder modifiedTemplate = new StringBuilder();
+			modifiedTemplate.append(modifiedTemplatePath);
+			StringBuilder mainHtml = new StringBuilder();
+
+			boolean processReturn = utility.downloadPdfForm(formData, mainHtml, formAbbr, templatePath, null);
+
+			if (!processReturn) {
+				throw new HomeInstructionException("Unable to generate PDF for form : " + formAbbr,
+						Constant.DATABASE_ERROR_CODE);
+			}
+
+			File modifiedHtmlFile = new File(modifiedTemplate.toString());
+			File pdfFile = new File(pdfFileLoc.toString());
+
+			FileUtils.writeStringToFile(modifiedHtmlFile, mainHtml.toString(), StandardCharsets.UTF_8);
+
+			utility.generatePDF(modifiedHtmlFile.getAbsolutePath(), pdfFile.getAbsolutePath());
+
+			FileUtils.deleteQuietly(modifiedHtmlFile);
+
+			if (!pdfFile.exists() || pdfFile.length() == 0) {
+				throw new HomeInstructionException("PDF generation failed.", Constant.DATABASE_ERROR_CODE);
+			}
+
+			return pdfFile;
+
+		} catch (Exception e) {
+			logger.error("Error generating PDF for form {}{}", formAbbr, e);
+			throw new HomeInstructionException(e.getMessage(), "Internal Server Error", e);
+		}
+	}
+
+	@Override
+	public Form10HSAPPResponseDTO getForm10HSAPP(Long id, Long applicationId, String configKeys, String lookupValues) {
+
+		logger.debug("Parameter for getForm10HSAPP API ID: {}\n, aplicationId: {} ", id, applicationId);
+
+		try {
+
+			List<LookupDetails> lookupTypeList = new ArrayList<>();
+			if (StringUtils.isNotBlank(lookupValues)) {
+				lookupTypeList = userDetailsRepo.getLookupValues(lookupValues);
+			}
+			Map<String, String> configKeyList = Collections.emptyMap();
+			if (StringUtils.isNotBlank(configKeys)) {
+				configKeyList = utility.getConfigList(configKeys);
+			}
+			List<Form10HSAPPDataResp> form10HSAPPDataResp = homeInstructionRepo.getForm10HSAPPData(id, applicationId);
+			Form10HSAPPResponseDTO commonResponse = null;
+
+			if (!form10HSAPPDataResp.isEmpty()) {
+
+				commonResponse = new Form10HSAPPResponseDTO(true, Constant.getMessageMap().get(Constant.HSA_RFS),
+						utility.responseDate(LocalDateTime.now()), form10HSAPPDataResp.get(0), configKeyList,
+						lookupTypeList, new ArrayList<>());
+
+			} else {
+
+				commonResponse = new Form10HSAPPResponseDTO(true, Constant.getMessageMap().get(Constant.HSA_RNF),
+						utility.responseDate(LocalDateTime.now()), null, configKeyList, lookupTypeList,
+						new ArrayList<>());
+
+			}
+
+			return commonResponse;
+
+		} catch (Exception e) {
+			logger.error("Exception occured while calling getForm10HSAPP data:{}{} ", e.getMessage(), e);
+			throw new HomeInstructionException(e.getMessage(), Constant.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	@Override
+	@Transactional
+	public Form8HiscpResp updateForm8Data(Form8Request form8Request) {
+		try {
+
+			logger.debug("Request for Form 8 HISCP. {}",
+					utility.printJson(form8Request) != null ? utility.printJson(form8Request) : form8Request);
+
+			Map<String, String> configKeyValuesForF = utility.getConfigList("FILETMPL,TEMPL_PATH");
+
+			String templatePath = configKeyValuesForF.get("TEMPL_PATH") + File.separator + "HI_APPLN_"// NOSONAR
+					+ form8Request.getFormAbbreviation() + ".html";
+
+			List<Long> updateForm8DataList = homeInstructionRepo.updateForm8HISCPdata(form8Request);
+
+			if (CollectionUtils.isEmpty(updateForm8DataList) || updateForm8DataList.get(0) <= 0) {
+
+				logger.info("Unable to submit Form 8 HISCP.");
+
+				return new Form8HiscpResp(false, Constant.getMessageMap().get(Constant.HISC_UUR),
+						utility.responseDate(LocalDateTime.now()), updateForm8DataList.get(0), new ArrayList<>());
+			}
+
+			List<Form8HiscpDataResp> form8HISCPDataResp = homeInstructionRepo
+					.getForm8HiscpData(updateForm8DataList.get(0), form8Request.getApplicationId());
+
+			if (CollectionUtils.isEmpty(form8HISCPDataResp)) {
+				throw new HomeInstructionException("Unable to fetch updated Form 8 HISCP data.",
+						Constant.INTERNAL_SERVER_ERROR);
+			}
+
+			String modifiedTemplatePath = configKeyValuesForF.get("FILETMPL") + File.separator + "ModiFied_HI_APPLN_"
+					+ form8Request.getFormAbbreviation() + "_" + form8Request.getApplicationId() + ".html";
+
+			String temporaryPdfPath = configKeyValuesForF.get("FILETMPL") + File.separator + "HI_APPLN_"
+					+ form8Request.getFormAbbreviation() + "_" + form8Request.getApplicationId() + ".pdf";
+
+			File pdfFile = generateForm8Pdf(form8HISCPDataResp.get(0), form8Request.getFormAbbreviation(), templatePath, // NOSONAR
+					modifiedTemplatePath, temporaryPdfPath);
+
+			MultipartFile multipartFile = utility.convertFileToMultipartFile(new File(temporaryPdfPath));
+
+			UploadFormDocumentReq uploadReq = new UploadFormDocumentReq();
+
+			uploadReq.setIndicator("I");
+			uploadReq.setId(0);
+			uploadReq.setStudentId(form8Request.getStudentId());
+			uploadReq.setSchoolYear(form8Request.getSchoolYear());
+			uploadReq.setApplicationType("");
+			uploadReq.setSchoolCode("");
+			uploadReq.setGradeId(0);
+			uploadReq.setRequestDate("");
+			uploadReq.setClassification("");
+			uploadReq.setActivity(form8Request.getActivity());
+			uploadReq.setStatus(form8Request.getStatus());
+			uploadReq.setComment(form8Request.getComment());
+			uploadReq.setApplicationId(form8Request.getApplicationId());
+			uploadReq.setFormMasterId(form8Request.getFormMasterId());
+			uploadReq.setUploadedGeneratedTag("S");
+			uploadReq.setOriginalFileName(FilenameUtils.getName(temporaryPdfPath));
+			uploadReq.setUploadedBy(form8Request.getLoggedInUserId());
+			uploadReq.setUploadPersonType(form8Request.getLoggedInUserPersonType());
+
+			FileUploadResp uploadResp = fileUploadService.uploadAndParseFile(multipartFile, uploadReq);
+
+			if (!uploadResp.isSuccess()) {
+				throw new HomeInstructionException(uploadResp.getMessage(), Constant.INTERNAL_SERVER_ERROR);
+			}
+
+			FileUtils.deleteQuietly(pdfFile);
+
+			List<HIFormTransactionResp> attachmentList = homeInstructionRepo.getHIFormTransactionData(0L,
+					form8Request.getApplicationId(), 0L, form8Request.getLoggedInUserPersonType());
+
+			logger.info("Record submitted successfully for Form 8 HISCP.");
+
+			String message = "";
+			if (StringUtils.equalsIgnoreCase(form8Request.getActivity(), "STCN")) {
+				message = Constant.getMessageMap().get(Constant.HISC_STC);
+			} else {
+				message = Constant.getMessageMap().get(Constant.HISC_FUS);
+			}
+
+			return new Form8HiscpResp(true, message, utility.responseDate(LocalDateTime.now()),
+					updateForm8DataList.get(0), attachmentList);
+
+		} catch (Exception e) {
+
+			logger.error("Error occurred while updating Form 8 HISCP. {}{}", e.getMessage(), e);
+
+			throw new HomeInstructionException(e.getMessage(), "Internal Server Error", e);
+		}
+	}
+
+	@Override
+	@Transactional
+	public Form760DhiResponseDTO updateForm760DHIData(Form760DHIRequest form760DHIRequest) {
+
+		try {
+
+			logger.debug("Request for Form6 30DHI. {}",
+					utility.printJson(form760DHIRequest) != null ? utility.printJson(form760DHIRequest)
+							: form760DHIRequest);
+
+			Map<String, String> configKeyValuesForF = utility.getConfigList("FILETMPL,TEMPL_PATH");
+			String templatePath = "";
+
+			templatePath = configKeyValuesForF.get("TEMPL_PATH") + File.separator + "HI_APPLN_"
+					+ form760DHIRequest.getFormAbbreviation() + ".html";
+
+			List<GetPhysicianInfoResp> physcData = homeInstructionRepo
+					.getPhysicianInfoData(form760DHIRequest.getApplicationId());
+
+			List<Long> updateForm760DHIDataList = homeInstructionRepo.updateForm760DHIdata(form760DHIRequest,
+					physcData.get(0));
+
+			if (CollectionUtils.isEmpty(updateForm760DHIDataList) || updateForm760DHIDataList.get(0) <= 0) {
+
+				logger.info("Unable to submit Form7 60DHI.");
+
+				return new Form760DhiResponseDTO(false, Constant.getMessageMap().get(Constant.RHI_NSF),
+						utility.responseDate(LocalDateTime.now()), new ArrayList<>());
+			}
+
+			String modifiedTemplatePath = configKeyValuesForF.get("FILETMPL") + File.separator + "ModiFied_HI_APPLN_"
+					+ form760DHIRequest.getFormAbbreviation() + "_" + form760DHIRequest.getApplicationId() + ".html";
+			String temporaryPdfPath = configKeyValuesForF.get("FILETMPL") + File.separator + "HI_APPLN_"
+					+ form760DHIRequest.getFormAbbreviation() + "_" + form760DHIRequest.getApplicationId() + ".pdf";
+
+			Form760DhiDataResp data = new Form760DhiDataResp();
+			List<ApplicationInfoResp> appInfoData = homeInstructionRepo.getApplicationInfoData(
+					form760DHIRequest.getApplicationId(), form760DHIRequest.getLoggedInUserPersonType());
+			data.setStudentId(appInfoData.get(0).getStudentId());
+			data.setStudentName(appInfoData.get(0).getStudentName());
+			data.setNoticeDate(form760DHIRequest.getNoticeDate());
+			data.setNurseName(form760DHIRequest.getNurseName());
+			data.setStudentGrade(appInfoData.get(0).getStudentGrade());
+			data.setPhysicianName(physcData.get(0).getPhysicianName());
+			data.setPhysicianVerifiedOn(physcData.get(0).getPhysicianSignDate());
+
+			File pdfFile = generateForm7Pdf(data, form760DHIRequest.getFormAbbreviation(), // NOSONAR
+					templatePath, modifiedTemplatePath, temporaryPdfPath);
+
+			MultipartFile multipartFile = utility.convertFileToMultipartFile(new File(temporaryPdfPath));
+
+			UploadFormDocumentReq uploadReq = new UploadFormDocumentReq();
+
+			uploadReq.setIndicator("I");
+			uploadReq.setId(0);
+			uploadReq.setStudentId(form760DHIRequest.getStudentId());
+			uploadReq.setSchoolYear(form760DHIRequest.getSchoolYear());
+			uploadReq.setApplicationType("");
+			uploadReq.setSchoolCode("");
+			uploadReq.setGradeId(0);
+			uploadReq.setRequestDate("");
+			uploadReq.setClassification("");
+			uploadReq.setActivity(form760DHIRequest.getActivity());
+			uploadReq.setStatus(form760DHIRequest.getStatus());
+			uploadReq.setComment(form760DHIRequest.getComment());
+			uploadReq.setApplicationId(form760DHIRequest.getApplicationId());
+			uploadReq.setFormMasterId(form760DHIRequest.getFormMasterId());
+			uploadReq.setUploadedGeneratedTag("S");
+			uploadReq.setOriginalFileName(FilenameUtils.getName(temporaryPdfPath));
+			uploadReq.setUploadedBy(form760DHIRequest.getLoggedInUserId());
+			uploadReq.setUploadPersonType(form760DHIRequest.getLoggedInUserPersonType());
+
+			FileUploadResp uploadResp = fileUploadService.uploadAndParseFile(multipartFile, uploadReq);
+
+			if (!uploadResp.isSuccess()) {
+				throw new HomeInstructionException(uploadResp.getMessage(), Constant.INTERNAL_SERVER_ERROR);
+			}
+
+			FileUtils.deleteQuietly(pdfFile);
+
+			List<HIFormTransactionResp> attachmentList = homeInstructionRepo.getHIFormTransactionData(0L,
+					form760DHIRequest.getApplicationId(), 0L, form760DHIRequest.getLoggedInUserPersonType());
+			logger.info("Record submitted successfully for Form7 60DHI.");
+
+			return new Form760DhiResponseDTO(true, Constant.getMessageMap().get(Constant.RHI_NSS),
+					utility.responseDate(LocalDateTime.now()), attachmentList);
+
+		} catch (Exception e) {
+
+			logger.error("Error while updating Form7 60DHI. {}{}", e.getMessage(), e);
+
+			throw new HomeInstructionException(e.getMessage(), "Internal Server Error", e);
+		}
+	}
+
+	public File generateForm7Pdf(Form760DhiDataResp formData, String formAbbr, String templatePath,
+			String modifiedTemplatePath, String outputPdfPath) {
+
+		try {
+
+			StringBuilder pdfFileLoc = new StringBuilder();
+			pdfFileLoc.append(outputPdfPath);
+			StringBuilder modifiedTemplate = new StringBuilder();
+			modifiedTemplate.append(modifiedTemplatePath);
+			StringBuilder mainHtml = new StringBuilder();
+
+			boolean processReturn = utility.downloadPdfForm(formData, mainHtml, formAbbr, templatePath, null);
+
+			if (!processReturn) {
+				throw new HomeInstructionException("Unable to generate PDF for form : " + formAbbr,
+						Constant.DATABASE_ERROR_CODE);
+			}
+
+			File modifiedHtmlFile = new File(modifiedTemplate.toString());
+			File pdfFile = new File(pdfFileLoc.toString());
+
+			FileUtils.writeStringToFile(modifiedHtmlFile, mainHtml.toString(), StandardCharsets.UTF_8);
+
+			utility.generatePDF(modifiedHtmlFile.getAbsolutePath(), pdfFile.getAbsolutePath());
+
+			FileUtils.deleteQuietly(modifiedHtmlFile);
+
+			if (!pdfFile.exists() || pdfFile.length() == 0) {
+				throw new HomeInstructionException("PDF generation failed.", Constant.DATABASE_ERROR_CODE);
+			}
+
+			return pdfFile;
+
+		} catch (Exception e) {
+			logger.error("Error occurred while updating Form5 LAHIT. while generating PDF for form {}{}", formAbbr, e);
+			throw new HomeInstructionException(e.getMessage(), "Internal Server Error", e);
+		}
+	}
+
+}

@@ -1,0 +1,76 @@
+/*
+ * Copyright (C) YYYY-YYYY XXXXXXXXXXXXX
+ * mailto:AAAA@DDDD.COM
+ *
+ */
+package com.jcboe.home.instruction.service;
+
+import com.jcboe.home.instruction.model.request.Form10Request;
+import com.jcboe.home.instruction.model.request.Form1Request;
+import com.jcboe.home.instruction.model.request.Form2Request;
+import com.jcboe.home.instruction.model.request.Form3Request;
+import com.jcboe.home.instruction.model.request.Form4Request;
+import com.jcboe.home.instruction.model.request.Form630DHIRequest;
+import com.jcboe.home.instruction.model.request.Form760DHIRequest;
+import com.jcboe.home.instruction.model.request.Form8Request;
+import com.jcboe.home.instruction.model.request.Form9Request;
+import com.jcboe.home.instruction.response.Form10HSAPPResponseDTO;
+import com.jcboe.home.instruction.response.Form1APHIRResponseDTO;
+import com.jcboe.home.instruction.response.Form1AphirResp;
+import com.jcboe.home.instruction.response.Form2RHIDTResponseDTO;
+import com.jcboe.home.instruction.response.Form2RhidtResp;
+import com.jcboe.home.instruction.response.Form3RhiltResp;
+import com.jcboe.home.instruction.response.Form3RhiltResponseDTO;
+import com.jcboe.home.instruction.response.Form4PrthiResp;
+import com.jcboe.home.instruction.response.Form4PrthiResponseDTO;
+import com.jcboe.home.instruction.response.Form630DHIResp;
+import com.jcboe.home.instruction.response.Form630DhiResponseDTO;
+import com.jcboe.home.instruction.response.Form760DhiResp;
+import com.jcboe.home.instruction.response.Form760DhiResponseDTO;
+import com.jcboe.home.instruction.response.Form8HiscpResp;
+import com.jcboe.home.instruction.response.Form8HiscpResponseDTO;
+import com.jcboe.home.instruction.response.Form9EAPPResp;
+import com.jcboe.home.instruction.response.Form9EAPPResponseDTO;
+
+public interface IHomeInstructionService {
+
+	Form1AphirResp updateForm1Data(Form1Request form1Request);
+
+	Form1APHIRResponseDTO getForm1ApiHir(Long id, Long applicationId, Long formMasterId, String loggedInUserId,
+			String loggedInUserPersonType, String configKeys, String lookupValues, boolean isStudent);
+
+	Form4PrthiResponseDTO getForm4Prthi(Long id, Long applicationId, String configKeys, String lookupValues);
+
+	Form630DhiResponseDTO getForm630dhi(Long id, String configKeys, String lookupValues);
+
+	Form760DhiResp getForm760Dhi(Long id, String configKeys, String lookupValues);
+
+	Form8HiscpResp updateForm8Data(Form8Request form8Request);
+
+	Form8HiscpResponseDTO getForm8Hiscp(Long id, Long applicationId, String configKeys, String lookupValues);
+
+	Form2RHIDTResponseDTO getForm2RHIDT(Long id, Long applicationId, String configKeys, String lookupValues);
+
+	Form3RhiltResponseDTO getForm3Rhilt(Long id, Long apllicationId, String configKeys, String lookupValues);
+
+	Form2RhidtResp updateForm2Data(Form2Request form1Request);
+
+	Form3RhiltResp updateForm3Data(Form3Request form3Request);
+
+	Form10HSAPPResponseDTO updateForm10Data(Form10Request form10Request);
+
+	Form4PrthiResp updateForm4Data(Form4Request form4Request);
+
+	Form9EAPPResp updateForm9Data(Form9Request form9ERequest);
+
+	Form9EAPPResponseDTO getForm9EAPP(Long id, Long applicationId, String configKeys, String lookupValues);
+
+	Form630DHIResp updateForm630DHIData(Form630DHIRequest form630dhiRequest);
+
+	Form10HSAPPResponseDTO getForm10HSAPP(Long id, Long applicationId, String configKeys, String lookupValues);
+
+	Form760DhiResponseDTO updateForm760DHIData(Form760DHIRequest form760dhiRequest);
+
+	Form1AphirResp updateForm1APHIRPhysicianInfo(Form1Request form1Request);
+
+}

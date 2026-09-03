@@ -1,0 +1,3370 @@
+package com.jcboe.home.instruction.service;
+
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
+
+import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import javax.servlet.http.HttpServletResponse;
+
+import org.apache.commons.io.FileUtils;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.ArgumentCaptor;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.Mockito;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.core.io.Resource;
+import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.web.multipart.MultipartFile;
+
+import com.jcboe.home.instruction.exception.HomeInstructionException;
+import com.jcboe.home.instruction.model.request.ApplicationTrackingDataList;
+import com.jcboe.home.instruction.model.request.ApplicationTrackingRequest;
+import com.jcboe.home.instruction.model.request.DHIRequest;
+import com.jcboe.home.instruction.model.request.DeleteDocumentReq;
+import com.jcboe.home.instruction.model.request.UpdateHIApplicationReq;
+import com.jcboe.home.instruction.model.request.UploadFormDocumentReq;
+import com.jcboe.home.instruction.repo.ApplicationListRepo;
+import com.jcboe.home.instruction.repo.FileUploadRepo;
+import com.jcboe.home.instruction.repo.HomeInstructionRepo;
+import com.jcboe.home.instruction.repo.UserDetailsRepo;
+import com.jcboe.home.instruction.response.ApplicationInfoResp;
+import com.jcboe.home.instruction.response.DeleteDocResponse;
+import com.jcboe.home.instruction.response.DocumentUpdateResp;
+import com.jcboe.home.instruction.response.FileUploadResp;
+import com.jcboe.home.instruction.response.Form1AphirDataResp;
+import com.jcboe.home.instruction.response.Form1AphirScheduleResp;
+import com.jcboe.home.instruction.response.Form630DhiDataResp;
+import com.jcboe.home.instruction.response.Form760DhiDataResp;
+import com.jcboe.home.instruction.response.GetAttachmentListResp;
+import com.jcboe.home.instruction.response.GetPhysicianInfoResp;
+import com.jcboe.home.instruction.response.HIFormTransactionResp;
+import com.jcboe.home.instruction.response.S3UploadResponse;
+import com.jcboe.home.instruction.utilities.Constant;
+import com.jcboe.home.instruction.utilities.Utility;
+import com.jcboe.home.instruction.utilities.Zip4jUtility;
+
+@ExtendWith(MockitoExtension.class)
+class FileUploadServiceImplTest {
+
+	@Mock
+	private Utility utility;
+
+	@Mock
+	private FileUploadRepo fileUploadRepo;
+
+	@Mock
+	private Zip4jUtility zip4jUtility;
+
+	@Mock
+	private UserDetailsRepo userDetailsRepo;
+
+	@Mock
+	private HttpServletResponse response;
+
+	@Mock
+	private Resource resource;
+
+	@Mock
+	HomeInstructionRepo homeInstructionRepo;
+
+	@Mock
+	ApplicationListRepo applicationListRepo;
+
+	@InjectMocks
+	private FileUploadServiceImpl fileUploadService;
+
+	@InjectMocks
+	private FileUploadServiceImpl service;
+
+	@TempDir
+	Path tempDir;
+
+	private Map<String, String> config;
+
+	@BeforeEach
+	void setup() {
+
+		config = new HashMap<>();
+		config.put("FILEEXTN", "pdf,txt");
+		config.put("FILEMSZ", "5MB");
+		config.put("FILEUPLOAD", "S");
+		config.put("S3BUCKETFOLDER", "test");
+		config.put("S3ACCESSKEY", "key");
+		config.put("S3SECRETKEY", "secret");
+		config.put("S3LIBBKTNAME", "bucket");
+		config.put("S3BUCKETREGION", "region");
+		config.put("FILETMPL", "/tmp");
+		config.put("FORM_SUB_FOLDER", "forms");
+
+	}
+
+	@Test
+	void uploadAndParseFile_emptyFile_shouldFail() {
+
+		MultipartFile file = new MockMultipartFile("file", "", "text/plain", new byte[0]);
+
+		UploadFormDocumentReq request = new UploadFormDocumentReq();
+
+		FileUploadResp response = fileUploadService.uploadAndParseFile(file, request);
+
+		assertFalse(response.isSuccess());
+	}
+
+	@Test
+    void uploadAndParseFile_invalidExtension_shouldFail() {
+
+        when(utility.getConfigList(anyString()))
+                .thenReturn(config);
+
+
+        MultipartFile file =
+                new MockMultipartFile(
+                        "file",
+                        "test.exe",
+                        "application/octet-stream",
+                        "data".getBytes()
+                );
+
+        UploadFormDocumentReq request = new UploadFormDocumentReq();
+
+
+        FileUploadResp response =
+                fileUploadService.uploadAndParseFile(file, request);
+
+
+        assertFalse(response.isSuccess());
+
+    }
+
+	@Test
+	void uploadAndParseFile_fileSizeExceeded_shouldFail() {
+
+		Map<String, String> configMap = new HashMap<>(config);
+		configMap.put("FILEMSZ", "1B");
+
+		when(utility.getConfigList(anyString())).thenReturn(configMap);
+
+		MultipartFile file = new MockMultipartFile("file", "test.pdf", "application/pdf", "123456".getBytes());
+
+		UploadFormDocumentReq request = new UploadFormDocumentReq();
+
+		FileUploadResp response = fileUploadService.uploadAndParseFile(file, request);
+
+		assertFalse(response.isSuccess());
+
+	}
+
+	@Test
+	void deleteDocumentData_whenDbDelete_shouldUpdateStatus() throws Exception {
+
+		UpdateHIApplicationReq request = new UpdateHIApplicationReq();
+
+		when(utility.getConfigList(anyString())).thenReturn(config);
+
+		when(fileUploadRepo.updateHITransactionData(any())).thenReturn(java.util.Collections.emptyList());
+
+		assertDoesNotThrow(() -> fileUploadService.deleteDocumentData(1, "abc.txt", "L", "", "", "", true));
+
+	}
+
+	@Test
+    void uploadAndParseFile_exception_shouldReturnFailure() {
+
+
+        when(utility.getConfigList(anyString()))
+                .thenThrow(new RuntimeException("error"));
+
+        MultipartFile file =
+                new MockMultipartFile(
+                        "file",
+                        "test.pdf",
+                        "application/pdf",
+                        "data".getBytes()
+                );
+        UploadFormDocumentReq request = new UploadFormDocumentReq();
+        FileUploadResp response = fileUploadService.uploadAndParseFile(file, request);
+        assertFalse(response.isSuccess());
+
+    }
+
+	@Test
+	void testUploadAndParseFile_EmptyFile() throws Exception {
+
+		UploadFormDocumentReq request = new UploadFormDocumentReq();
+		request.setApplicationId(1L);
+
+		MockMultipartFile file = new MockMultipartFile("file", "test.pdf", "application/pdf", new byte[0]);
+
+		Constant.getMessageMap().put(Constant.FUA_FSE, "File is empty");
+
+		FileUploadResp response = fileUploadService.uploadAndParseFile(file, request);
+
+		assertFalse(response.isSuccess());
+		assertEquals("File is empty", response.getMessage());
+
+		verifyNoInteractions(utility);
+		verifyNoInteractions(applicationListRepo);
+	}
+
+	@Test
+	void testUploadAndParseFile_NullFile() throws Exception {
+
+		UploadFormDocumentReq request = new UploadFormDocumentReq();
+
+		request.setApplicationId(1L);
+
+		Constant.getMessageMap().put(Constant.FUA_FSE, "File is empty");
+
+		FileUploadResp response = fileUploadService.uploadAndParseFile(null, request);
+
+		assertFalse(response.isSuccess());
+		assertEquals("File is empty", response.getMessage());
+
+		verifyNoInteractions(utility);
+		verifyNoInteractions(applicationListRepo);
+	}
+
+	@Test
+	void testUploadAndParseFile_InvalidExtension() throws Exception {
+
+		UploadFormDocumentReq request = new UploadFormDocumentReq();
+
+		request.setApplicationId(1L);
+
+		MockMultipartFile file = new MockMultipartFile("file", "test.exe", "application/octet-stream",
+				"test".getBytes());
+
+		Map<String, String> config = new HashMap<>();
+
+		config.put("FILEEXTN", "pdf,docx");
+		config.put("FILEMSZ", "10MB");
+		config.put("FORM_SUB_FOLDER", "forms");
+		config.put("FILEUPLOAD", "L");
+
+		when(utility.getConfigList(anyString())).thenReturn(config);
+
+		Constant.getMessageMap().put(Constant.FUA_CUF, "Supported formats are <FILE_TYPES>");
+
+		FileUploadResp response = fileUploadService.uploadAndParseFile(file, request);
+
+		assertFalse(response.isSuccess());
+
+		assertEquals("Supported formats are pdf,docx", response.getMessage());
+
+		verify(utility).getConfigList(anyString());
+
+		verify(applicationListRepo, never()).updateHIApplication(any(UpdateHIApplicationReq.class));
+	}
+
+	@Test
+	void testUploadAndParseFile_FileSizeExceeded() throws Exception {
+
+		UploadFormDocumentReq request = new UploadFormDocumentReq();
+
+		request.setApplicationId(1L);
+
+		byte[] content = "This is a test file".getBytes();
+
+		MockMultipartFile file = new MockMultipartFile("file", "test.pdf", "application/pdf", content);
+
+		Map<String, String> config = new HashMap<>();
+
+		config.put("FILEEXTN", "pdf");
+		config.put("FILEMSZ", "1B");
+		config.put("FORM_SUB_FOLDER", "forms");
+		config.put("FILEUPLOAD", "L");
+
+		when(utility.getConfigList(anyString())).thenReturn(config);
+
+		Constant.getMessageMap().put(Constant.FUA_FSEX, "File size exceeds {size}");
+
+		FileUploadResp response = fileUploadService.uploadAndParseFile(file, request);
+
+		assertFalse(response.isSuccess());
+
+		assertEquals("File size exceeds 1B", response.getMessage());
+
+		verify(applicationListRepo, never()).updateHIApplication(any(UpdateHIApplicationReq.class));
+	}
+
+	@Test
+	void testUploadAndParseFile_S3Success_NewApplication() throws Exception {
+
+		UploadFormDocumentReq request = new UploadFormDocumentReq();
+
+		request.setApplicationId(null);
+		request.setStudentId("STU001");
+		request.setSchoolYear("2025");
+		request.setApplicationType("HI");
+		request.setSchoolCode("SCH001");
+		request.setGradeId(5);
+		request.setUploadedBy("USER1");
+		request.setUploadPersonType("PRNT");
+		request.setOriginalFileName("test.pdf");
+
+		MockMultipartFile file = new MockMultipartFile("file", "test.pdf", "application/pdf", "PDF DATA".getBytes());
+
+		Map<String, String> config = new HashMap<>();
+
+		config.put("FILEEXTN", "pdf");
+		config.put("FILEMSZ", "10MB");
+		config.put("FORM_SUB_FOLDER", "forms");
+		config.put("FILEUPLOAD", "S");
+		config.put("S3BUCKETFOLDER", "bucket");
+		config.put("S3ACCESSKEY", "access");
+		config.put("S3SECRETKEY", "secret");
+		config.put("S3LIBBKTNAME", "bucket-name");
+		config.put("S3BUCKETREGION", "region");
+		config.put("FILETMPL", tempDir.toString());
+		config.put("FPATH", tempDir.toString());
+
+		when(utility.getConfigList(anyString())).thenReturn(config);
+
+		// applicationId == null -> INSERT
+		when(applicationListRepo.updateHIApplication(any(UpdateHIApplicationReq.class)))
+				.thenReturn(Collections.singletonList(100L));
+
+		when(utility.getDocEncPass("100")).thenReturn("password");
+
+		S3UploadResponse s3Response = new S3UploadResponse();
+
+		s3Response.setSuccess(true);
+		s3Response.setGuid("s3-guid");
+
+		when(utility.uploadBase64FileToS3(eq(file), eq("access"), eq("secret"), eq("bucket-name"), anyString(),
+				eq("region"), anyString(), eq(false), eq("password"), anyString(), eq(tempDir.toString())))
+				.thenReturn(s3Response);
+
+		DocumentUpdateResp transaction = new DocumentUpdateResp();
+
+		transaction.setId(500L);
+		transaction.setApplicationNo("APP001");
+		transaction.setApplicationStatus("SUBMITTED");
+		transaction.setApplicationStatusAbbrev("SUB");
+
+		when(fileUploadRepo.updateHITransactionData(request)).thenReturn(Collections.singletonList(transaction));
+
+		when(homeInstructionRepo.getHIFormTransactionData(eq(0L), eq(100L), eq(0L), eq("PRNT")))
+				.thenReturn(Collections.emptyList());
+
+		Constant.getMessageMap().put(Constant.FUA_FUS, "File uploaded successfully");
+
+		Constant.getMessageMap().put(Constant.FUA_UUF, "Unable to upload file");
+
+		FileUploadResp response = fileUploadService.uploadAndParseFile(file, request);
+
+		assertTrue(response.isSuccess());
+
+		assertEquals(Long.valueOf(500L), response.getTransactionId());
+
+		assertEquals(Long.valueOf(100L), response.getApplicationId());
+
+		assertEquals("APP001", response.getApplicationNo());
+
+		assertEquals("SUBMITTED", response.getApplicationStatus());
+
+		assertEquals("SUB", response.getApplicationStatusAbbrev());
+
+		assertEquals("s3-guid", request.getEncryptedFileGuid());
+
+		verify(applicationListRepo).updateHIApplication(any(UpdateHIApplicationReq.class));
+
+		verify(utility).uploadBase64FileToS3(eq(file), eq("access"), eq("secret"), eq("bucket-name"), anyString(),
+				eq("region"), anyString(), eq(false), eq("password"), anyString(), eq(anyString()));
+
+		verify(fileUploadRepo).updateHITransactionData(request);
+	}
+
+	@Test
+	void testUploadAndParseFile_S3Success_ExistingApplication() throws Exception {
+
+		UploadFormDocumentReq request = new UploadFormDocumentReq();
+
+		request.setApplicationId(100L);
+		request.setStudentId("STU001");
+		request.setSchoolYear("2025");
+		request.setApplicationType("HI");
+		request.setSchoolCode("SCH001");
+		request.setGradeId(5);
+		request.setUploadedBy("USER1");
+		request.setUploadPersonType("PRNT");
+		request.setOriginalFileName("test.pdf");
+
+		MockMultipartFile file = new MockMultipartFile("file", "test.pdf", "application/pdf", "PDF DATA".getBytes());
+
+		Map<String, String> config = new HashMap<>();
+
+		config.put("FILEEXTN", "pdf");
+		config.put("FILEMSZ", "10MB");
+		config.put("FORM_SUB_FOLDER", "forms");
+		config.put("FILEUPLOAD", "S");
+		config.put("S3BUCKETFOLDER", "bucket");
+		config.put("S3ACCESSKEY", "access");
+		config.put("S3SECRETKEY", "secret");
+		config.put("S3LIBBKTNAME", "bucket-name");
+		config.put("S3BUCKETREGION", "region");
+		config.put("FILETMPL", tempDir.toString());
+
+		when(utility.getConfigList(anyString())).thenReturn(config);
+
+		when(applicationListRepo.updateHIApplication(any(UpdateHIApplicationReq.class)))
+				.thenReturn(Collections.singletonList(100L));
+
+		when(utility.getDocEncPass("100")).thenReturn("password");
+
+		S3UploadResponse s3Response = new S3UploadResponse();
+
+		s3Response.setSuccess(true);
+		s3Response.setGuid("s3-guid");
+
+		when(utility.uploadBase64FileToS3(any(), anyString(), anyString(), anyString(), anyString(), anyString(),
+				anyString(), eq(false), anyString(), anyString(), anyString())).thenReturn(s3Response);
+
+		when(fileUploadRepo.updateHITransactionData(request)).thenReturn(Collections.emptyList());
+
+		when(homeInstructionRepo.getHIFormTransactionData(eq(0L), eq(100L), eq(0L), eq("PRNT")))
+				.thenReturn(Collections.emptyList());
+
+		Constant.getMessageMap().put(Constant.FUA_FUS, "Success");
+
+		FileUploadResp response = fileUploadService.uploadAndParseFile(file, request);
+
+		assertTrue(response.isSuccess());
+
+		ArgumentCaptor<UpdateHIApplicationReq> captor = ArgumentCaptor.forClass(UpdateHIApplicationReq.class);
+
+		verify(applicationListRepo).updateHIApplication(captor.capture());
+
+		assertEquals("U", captor.getValue().getIndicator());
+	}
+
+	@Test
+	void testUploadAndParseFile_S3Failure() throws Exception {
+
+		UploadFormDocumentReq request = new UploadFormDocumentReq();
+
+		request.setApplicationId(100L);
+		request.setSchoolYear("2025");
+		request.setUploadPersonType("PRNT");
+
+		MockMultipartFile file = new MockMultipartFile("file", "test.pdf", "application/pdf", "PDF".getBytes());
+
+		Map<String, String> config = new HashMap<>();
+
+		config.put("FILEEXTN", "pdf");
+		config.put("FILEMSZ", "10MB");
+		config.put("FORM_SUB_FOLDER", "forms");
+		config.put("FILEUPLOAD", "S");
+		config.put("S3BUCKETFOLDER", "bucket");
+		config.put("S3ACCESSKEY", "access");
+		config.put("S3SECRETKEY", "secret");
+		config.put("S3LIBBKTNAME", "bucket-name");
+		config.put("S3BUCKETREGION", "region");
+		config.put("FILETMPL", tempDir.toString());
+
+		when(utility.getConfigList(anyString())).thenReturn(config);
+
+		when(applicationListRepo.updateHIApplication(any(UpdateHIApplicationReq.class)))
+				.thenReturn(Collections.singletonList(100L));
+
+		when(utility.getDocEncPass("100")).thenReturn("password");
+
+		S3UploadResponse s3Response = new S3UploadResponse();
+
+		s3Response.setSuccess(false);
+
+		when(utility.uploadBase64FileToS3(any(), anyString(), anyString(), anyString(), anyString(), anyString(),
+				anyString(), eq(false), anyString(), anyString(), anyString())).thenReturn(s3Response);
+
+		when(homeInstructionRepo.getHIFormTransactionData(eq(0L), eq(100L), eq(0L), eq("PRNT")))
+				.thenReturn(Collections.emptyList());
+
+		Constant.getMessageMap().put(Constant.FUA_UUF, "Unable to upload file");
+
+		FileUploadResp response = fileUploadService.uploadAndParseFile(file, request);
+
+		assertFalse(response.isSuccess());
+
+		assertEquals("Unable to upload file", response.getMessage());
+
+		verify(fileUploadRepo, never()).updateHITransactionData(any());
+
+		verify(homeInstructionRepo).getHIFormTransactionData(eq(0L), eq(100L), eq(0L), eq("PRNT"));
+	}
+
+	@Test
+	void testUploadAndParseFile_S3Success_TransactionListEmpty() throws Exception {
+
+		UploadFormDocumentReq request = new UploadFormDocumentReq();
+
+		request.setApplicationId(100L);
+		request.setSchoolYear("2025");
+		request.setUploadPersonType("PRNT");
+
+		MockMultipartFile file = new MockMultipartFile("file", "test.pdf", "application/pdf", "PDF".getBytes());
+
+		Map<String, String> config = new HashMap<>();
+
+		config.put("FILEEXTN", "pdf");
+		config.put("FILEMSZ", "10MB");
+		config.put("FORM_SUB_FOLDER", "forms");
+		config.put("FILEUPLOAD", "S");
+		config.put("S3BUCKETFOLDER", "bucket");
+		config.put("S3ACCESSKEY", "access");
+		config.put("S3SECRETKEY", "secret");
+		config.put("S3LIBBKTNAME", "bucket-name");
+		config.put("S3BUCKETREGION", "region");
+		config.put("FILETMPL", tempDir.toString());
+
+		when(utility.getConfigList(anyString())).thenReturn(config);
+
+		when(applicationListRepo.updateHIApplication(any(UpdateHIApplicationReq.class)))
+				.thenReturn(Collections.singletonList(100L));
+
+		when(utility.getDocEncPass("100")).thenReturn("password");
+
+		S3UploadResponse s3Response = new S3UploadResponse();
+
+		s3Response.setSuccess(true);
+		s3Response.setGuid("guid");
+
+		when(utility.uploadBase64FileToS3(any(), anyString(), anyString(), anyString(), anyString(), anyString(),
+				anyString(), eq(false), anyString(), anyString(), anyString())).thenReturn(s3Response);
+
+		when(fileUploadRepo.updateHITransactionData(request)).thenReturn(Collections.emptyList());
+
+		when(homeInstructionRepo.getHIFormTransactionData(eq(0L), eq(100L), eq(0L), eq("PRNT")))
+				.thenReturn(Collections.emptyList());
+
+		Constant.getMessageMap().put(Constant.FUA_FUS, "Success");
+
+		FileUploadResp response = fileUploadService.uploadAndParseFile(file, request);
+
+		assertTrue(response.isSuccess());
+		assertEquals("Success", response.getMessage());
+
+		assertNull(response.getTransactionId());
+	}
+
+	@Test
+	void testUploadAndParseFile_LocalSuccess() throws Exception {
+
+		UploadFormDocumentReq request = new UploadFormDocumentReq();
+
+		request.setApplicationId(100L);
+		request.setSchoolYear("2025");
+		request.setUploadPersonType("PRNT");
+		request.setOriginalFileName("test.pdf");
+
+		MockMultipartFile file = new MockMultipartFile("file", "test.pdf", "application/pdf", "PDF DATA".getBytes());
+
+		Map<String, String> config = new HashMap<>();
+
+		config.put("FILEEXTN", "pdf");
+		config.put("FILEMSZ", "10MB");
+		config.put("FORM_SUB_FOLDER", "forms");
+		config.put("FILEUPLOAD", "L");
+		config.put("FPATH", tempDir.toString());
+		config.put("FILETMPL", tempDir.toString());
+
+		when(utility.getConfigList(anyString())).thenReturn(config);
+
+		when(applicationListRepo.updateHIApplication(any(UpdateHIApplicationReq.class)))
+				.thenReturn(Collections.singletonList(100L));
+
+		when(utility.getDocEncPass("100")).thenReturn("password");
+
+		File encryptedFile = File.createTempFile("encrypted", ".zip");
+
+		FileUtils.writeStringToFile(encryptedFile, "encrypted data", StandardCharsets.UTF_8);
+
+		when(utility.getProtectedZipFile(eq(file), eq("password"), anyString(), eq(tempDir.toString())))
+				.thenReturn(encryptedFile);
+
+		when(utility.getBase64EncDoc(encryptedFile)).thenReturn("BASE64_DATA");
+
+		doNothing().when(utility).createDirIfNotExists(any(File.class));
+
+		doNothing().when(utility).permitFileAndFolder(any(File.class));
+
+		DocumentUpdateResp transaction = new DocumentUpdateResp();
+
+		transaction.setId(500L);
+		transaction.setApplicationNo("APP001");
+		transaction.setApplicationStatus("SUBMITTED");
+		transaction.setApplicationStatusAbbrev("SUB");
+
+		when(fileUploadRepo.updateHITransactionData(request)).thenReturn(Collections.singletonList(transaction));
+
+		when(homeInstructionRepo.getHIFormTransactionData(eq(0L), eq(100L), eq(0L), eq("PRNT")))
+				.thenReturn(Collections.emptyList());
+
+		Constant.getMessageMap().put(Constant.FUA_FUS, "Success");
+
+		FileUploadResp response = fileUploadService.uploadAndParseFile(file, request);
+
+		assertTrue(response.isSuccess());
+
+		assertEquals("Success", response.getMessage());
+
+		assertEquals(Long.valueOf(500L), response.getTransactionId());
+
+		assertEquals("APP001", response.getApplicationNo());
+
+		verify(utility).getProtectedZipFile(eq(file), eq("password"), anyString(), eq(tempDir.toString()));
+
+		verify(utility).getBase64EncDoc(encryptedFile);
+
+		verify(utility).permitFileAndFolder(any(File.class));
+
+		verify(fileUploadRepo).updateHITransactionData(request);
+	}
+
+	@Test
+	void testUploadAndParseFile_LocalSuccess_TransactionNull() throws Exception {
+
+		UploadFormDocumentReq request = new UploadFormDocumentReq();
+
+		request.setApplicationId(100L);
+		request.setSchoolYear("2025");
+		request.setUploadPersonType("PRNT");
+
+		MockMultipartFile file = new MockMultipartFile("file", "test.pdf", "application/pdf", "PDF".getBytes());
+
+		Map<String, String> config = new HashMap<>();
+
+		config.put("FILEEXTN", "pdf");
+		config.put("FILEMSZ", "10MB");
+		config.put("FORM_SUB_FOLDER", "forms");
+		config.put("FILEUPLOAD", "L");
+		config.put("FPATH", tempDir.toString());
+		config.put("FILETMPL", tempDir.toString());
+
+		when(utility.getConfigList(anyString())).thenReturn(config);
+
+		when(applicationListRepo.updateHIApplication(any(UpdateHIApplicationReq.class)))
+				.thenReturn(Collections.singletonList(100L));
+
+		when(utility.getDocEncPass("100")).thenReturn("password");
+
+		File encryptedFile = File.createTempFile("encrypted", ".zip");
+
+		FileUtils.writeStringToFile(encryptedFile, "encrypted", StandardCharsets.UTF_8);
+
+		when(utility.getProtectedZipFile(any(), eq("password"), anyString(), eq(tempDir.toString())))
+				.thenReturn(encryptedFile);
+
+		when(utility.getBase64EncDoc(encryptedFile)).thenReturn("BASE64");
+
+		when(fileUploadRepo.updateHITransactionData(request)).thenReturn(null);
+
+		when(homeInstructionRepo.getHIFormTransactionData(eq(0L), eq(100L), eq(0L), eq("PRNT")))
+				.thenReturn(Collections.emptyList());
+
+		Constant.getMessageMap().put(Constant.FUA_FUS, "Success");
+
+		FileUploadResp response = fileUploadService.uploadAndParseFile(file, request);
+
+		assertTrue(response.isSuccess());
+
+		assertEquals("Success", response.getMessage());
+
+		assertNull(response.getTransactionId());
+	}
+
+	@Test
+	void deleteDocumentData_s3Delete_success() throws Exception {
+
+		Map<String, String> config = new HashMap<>();
+		config.put("S3BUCKETFOLDER", "documents");
+		config.put("S3ACCESSKEY", "key");
+		config.put("S3SECRETKEY", "secret");
+		config.put("S3BUCKETREGION", "region");
+		config.put("S3LIBBKTNAME", "bucket");
+
+		when(utility.getConfigList(anyString())).thenReturn(config);
+
+		DocumentUpdateResp updateResp = new DocumentUpdateResp();
+		updateResp.setId(100L);
+
+		when(fileUploadRepo.updateHITransactionData(any())).thenReturn(Arrays.asList(updateResp));
+
+		DeleteDocResponse response = fileUploadService.deleteDocumentData(10, "sample-guid.txt", "S", "description",
+				"sample.pdf", "forms", true);
+
+		assertTrue(response.isSuccess());
+
+		verify(utility).deleteS3File(eq("key"), eq("secret"), eq("region"), eq("bucket"), eq("documents/forms"),
+				eq("sample-guid.txt"));
+	}
+
+	@Test
+	void uploadAndParseFile_s3Upload_success() throws Exception {
+
+	    when(utility.getConfigList(anyString()))
+	            .thenReturn(config);
+
+	    when(applicationListRepo.updateHIApplication(any()))
+	            .thenReturn(Arrays.asList(101L));
+
+	    when(utility.getDocEncPass(anyString()))
+	            .thenReturn("password");
+
+
+	    S3UploadResponse s3Response = new S3UploadResponse();
+	    s3Response.setSuccess(true);
+	    s3Response.setGuid("encrypted-guid");
+
+
+	    when(utility.uploadBase64FileToS3(
+	            any(),
+	            anyString(),
+	            anyString(),
+	            anyString(),
+	            anyString(),
+	            anyString(),
+	            anyString(),
+	            anyBoolean(),
+	            anyString(),
+	            anyString(),
+	            anyString()
+	    )).thenReturn(s3Response);
+
+
+	    DocumentUpdateResp updateResp = new DocumentUpdateResp();
+	    updateResp.setId(10L);
+
+	    when(fileUploadRepo.updateHITransactionData(any()))
+	            .thenReturn(Arrays.asList(updateResp));
+
+
+	    MultipartFile file =
+	            new MockMultipartFile(
+	                    "file",
+	                    "test.pdf",
+	                    "application/pdf",
+	                    "content".getBytes()
+	            );
+
+
+	    UploadFormDocumentReq request = new UploadFormDocumentReq();
+
+
+	    FileUploadResp response =
+	            fileUploadService.uploadAndParseFile(file, request);
+
+
+	    assertTrue(response.isSuccess());
+
+	    verify(fileUploadRepo)
+	            .updateHITransactionData(any());
+	}
+
+	@Test
+	void uploadAndParseFile_s3Upload_failure() throws Exception {
+
+	    when(utility.getConfigList(anyString()))
+	            .thenReturn(config);
+
+	    when(applicationListRepo.updateHIApplication(any()))
+	            .thenReturn(Arrays.asList(1L));
+
+	    when(utility.getDocEncPass(anyString()))
+	            .thenReturn("password");
+
+
+	    S3UploadResponse s3Response =
+	            new S3UploadResponse();
+
+	    s3Response.setSuccess(false);
+
+
+	    when(utility.uploadBase64FileToS3(
+	            any(),
+	            anyString(),
+	            anyString(),
+	            anyString(),
+	            anyString(),
+	            anyString(),
+	            anyString(),
+	            anyBoolean(),
+	            anyString(),
+	            anyString(),
+	            anyString()
+	    )).thenReturn(s3Response);
+
+
+	    MultipartFile file =
+	            new MockMultipartFile(
+	                    "file",
+	                    "test.pdf",
+	                    "application/pdf",
+	                    "content".getBytes()
+	            );
+
+
+	    FileUploadResp response =
+	            fileUploadService.uploadAndParseFile(
+	                    file,
+	                    new UploadFormDocumentReq()
+	            );
+
+
+	    assertFalse(response.isSuccess());
+	}
+
+	@Test
+	void uploadAndParseFile_localStorage_success() throws Exception {
+
+		config.put("FILEUPLOAD", "L");
+		config.put("FPATH", "/tmp");
+
+		when(utility.getConfigList(anyString())).thenReturn(config);
+
+		when(applicationListRepo.updateHIApplication(any())).thenReturn(Arrays.asList(100L));
+
+		when(utility.getDocEncPass(anyString())).thenReturn("password");
+
+		File encryptedFile = new File("/tmp/encrypted.zip");
+
+		when(utility.getProtectedZipFile(any(), anyString(), anyString(), anyString())).thenReturn(encryptedFile);
+
+		DocumentUpdateResp updateResp = new DocumentUpdateResp();
+
+		updateResp.setId(1L);
+
+		when(fileUploadRepo.updateHITransactionData(any())).thenReturn(Arrays.asList(updateResp));
+
+		MultipartFile file = new MockMultipartFile("file", "test.pdf", "application/pdf", "hello".getBytes());
+
+		FileUploadResp response = fileUploadService.uploadAndParseFile(file, new UploadFormDocumentReq());
+
+		assertTrue(response.isSuccess());
+
+		verify(utility).createDirIfNotExists(any());
+
+	}
+
+	@Test
+	void uploadAndParseFile_shouldCreateApplicationAndSetTransactionDetails_whenApplicationIdIsNull() throws Exception {
+
+		Map<String, String> configMap = new HashMap<>(config);
+
+		configMap.put("FILEEXTN", "pdf");
+		configMap.put("FILEMSZ", "10MB");
+		configMap.put("FILEUPLOAD", "S");
+		configMap.put("S3BUCKETFOLDER", "test-folder");
+		configMap.put("FORM_SUB_FOLDER", "");
+		configMap.put("S3ACCESSKEY", "access");
+		configMap.put("S3SECRETKEY", "secret");
+		configMap.put("S3LIBBKTNAME", "bucket");
+		configMap.put("S3BUCKETREGION", "region");
+		configMap.put("FILETMPL", "template");
+
+		when(utility.getConfigList(anyString())).thenReturn(configMap);
+
+		MultipartFile file = new MockMultipartFile("file", "test.pdf", "application/pdf",
+				"test data".getBytes(StandardCharsets.UTF_8));
+
+		UploadFormDocumentReq request = new UploadFormDocumentReq();
+
+		request.setApplicationId(null);
+		request.setStudentId("100L");
+		request.setSchoolYear("2026");
+		request.setApplicationType("TYPE");
+		request.setSchoolCode("SCH001");
+		request.setGradeId(5);
+		request.setRequestDate("2026-08-14");
+		request.setUploadedBy("USER");
+		request.setUploadPersonType("ADMIN");
+
+		when(applicationListRepo.updateHIApplication(any(UpdateHIApplicationReq.class)))
+				.thenReturn(Collections.singletonList(123L));
+
+		when(utility.getDocEncPass("123")).thenReturn("encryption-password");
+
+		/*
+		 * S3 upload succeeds.
+		 */
+		S3UploadResponse s3Response = new S3UploadResponse();
+
+		s3Response.setSuccess(true);
+		s3Response.setGuid("s3-guid-123");
+
+		when(utility.uploadBase64FileToS3(eq(file), eq("access"), eq("secret"), eq("bucket"), anyString(), eq("region"),
+				anyString(), eq(false), eq("encryption-password"), anyString(), eq("template"))).thenReturn(s3Response);
+
+		DocumentUpdateResp transactionResponse = new DocumentUpdateResp();
+
+		transactionResponse.setId(999L);
+		transactionResponse.setUpdatedOn("2026-08-14");
+		transactionResponse.setApplicationNo("APP-123");
+		transactionResponse.setApplicationStatus("SUBMITTED");
+		transactionResponse.setApplicationStatusAbbrev("SUB");
+
+		when(fileUploadRepo.updateHITransactionData(any(UploadFormDocumentReq.class)))
+				.thenReturn(Collections.singletonList(transactionResponse));
+
+		List<HIFormTransactionResp> attachmentList = new ArrayList<>();
+
+		when(homeInstructionRepo.getHIFormTransactionData(eq(0L), eq(123L), eq(0L), eq("ADMIN")))
+				.thenReturn(attachmentList);
+
+		FileUploadResp response = fileUploadService.uploadAndParseFile(file, request);
+
+		assertNotNull(response);
+
+		assertTrue(response.isSuccess());
+
+		assertEquals("123L", request.getApplicationId());
+
+		assertEquals("999L", response.getTransactionId());
+
+		assertEquals("2026-08-14", response.getUpdatedOn());
+
+		assertEquals("123L", response.getApplicationId());
+
+		assertEquals("APP-123", response.getApplicationNo());
+
+		assertEquals("SUBMITTED", response.getApplicationStatus());
+
+		assertEquals("SUB", response.getApplicationStatusAbbrev());
+
+		verify(applicationListRepo).updateHIApplication(any(UpdateHIApplicationReq.class));
+
+		verify(fileUploadRepo).updateHITransactionData(any(UploadFormDocumentReq.class));
+	}
+
+	@Test
+	void deleteDocumentData_localFileDelete_success() throws Exception {
+
+		config.put("FPATH", "/tmp");
+
+		when(utility.getConfigList(anyString())).thenReturn(config);
+
+		DocumentUpdateResp update = new DocumentUpdateResp();
+
+		update.setId(10L);
+
+		when(fileUploadRepo.updateHITransactionData(any())).thenReturn(Arrays.asList(update));
+
+		DeleteDocResponse response = fileUploadService.deleteDocumentData(10, "sample.txt", "L", "", "", "", true);
+
+		assertTrue(response.isSuccess());
+	}
+
+	@Test
+	void testGetDownloadSubmittedForm_localSuccess() throws Exception {
+
+		Map<String, String> config = new HashMap<>();
+		config.put("FILETMPL", System.getProperty("java.io.tmpdir"));
+		config.put("FPATH", System.getProperty("java.io.tmpdir"));
+		config.put("FORM_SUB_FOLDER", "test");
+		config.put("PHSC_ATCH_RPT_NAME", "TEST_{student_id}.zip");
+		config.put("PHSC_ATCH_SUB_FOLDER", "SUB");
+		config.put("PARNT_ATCH_RPT_NAME", "PARENT_{student_id}.zip");
+		config.put("PARNT_ATCH_SUB_FOLDER", "PSUB");
+
+		when(utility.getConfigList(anyString())).thenReturn(config);
+
+		HIFormTransactionResp fileResp = new HIFormTransactionResp();
+		fileResp.setFileStorageIndicator("L");
+		fileResp.setOriginalFileExtension("pdf");
+		fileResp.setEncryptedFileGuid("guid123");
+		fileResp.setOriginalFileName("test.pdf");
+
+		List<HIFormTransactionResp> responseList = new ArrayList<>();
+		responseList.add(fileResp);
+
+		when(homeInstructionRepo.getHIFormTransactionData(anyLong(), anyLong(), anyLong(), anyString()))
+				.thenReturn(responseList);
+
+		when(utility.getDocEncPass(anyString())).thenReturn("pass");
+
+		File decodedFile = File.createTempFile("decoded", ".pdf");
+
+		when(utility.decodeAndSaveFile(any(), anyString(), anyString())).thenReturn(decodedFile);
+
+		when(utility.getUnzippedFile(any(), anyString(), anyString(), anyString(), anyString(), anyString()))
+				.thenReturn(decodedFile);
+
+		File zipFile = File.createTempFile("zipfile", ".zip");
+
+		when(zip4jUtility.zipMultipleFiles(any(), anyString(), anyString(), anyString())).thenReturn(zipFile);
+
+//		FormRequest req = new FormRequest();
+
+		Resource resp = fileUploadService.getDownloadSubmittedForm(1L, 1L, 1L, "2025", "U", "TEST");
+
+		assertNotNull(resp);
+	}
+
+	@Test
+	void testGetDownloadSubmittedForm_s3Success() throws Exception {
+
+		Map<String, String> config = new HashMap<>();
+		config.put("FILETMPL", System.getProperty("java.io.tmpdir"));
+		config.put("S3BUCKETFOLDER", "bucket");
+		config.put("FORM_SUB_FOLDER", "test");
+		config.put("S3ACCESSKEY", "access");
+		config.put("S3SECRETKEY", "secret");
+		config.put("S3LIBBKTNAME", "lib");
+		config.put("S3BUCKETREGION", "region");
+		config.put("PHSC_ATCH_RPT_NAME", "TEST_{student_id}.zip");
+		config.put("PHSC_ATCH_SUB_FOLDER", "SUB");
+
+		when(utility.getConfigList(anyString())).thenReturn(config);
+
+		HIFormTransactionResp fileResp = new HIFormTransactionResp();
+		fileResp.setFileStorageIndicator("S");
+		fileResp.setOriginalFileExtension("pdf");
+		fileResp.setEncryptedFileGuid("guid123");
+		fileResp.setOriginalFileName("test.pdf");
+
+		List<HIFormTransactionResp> responseList = new ArrayList<>();
+		responseList.add(fileResp);
+
+		when(utility.getDocEncPass(anyString())).thenReturn("pass");
+
+		File decodedFile = File.createTempFile("decoded", ".pdf");
+
+		when(utility.downloadFromS3AsStream(anyString(), anyString(), anyString(), anyString(), anyString(),
+				anyString(), anyString(), anyBoolean(), anyString(), anyString(), anyString(), anyString()))
+				.thenReturn(decodedFile);
+
+		File zipFile = File.createTempFile("zipfile", ".zip");
+
+		when(zip4jUtility.zipMultipleFiles(any(), anyString(), anyString(), anyString())).thenReturn(zipFile);
+
+		Resource resp = fileUploadService.getDownloadSubmittedForm(1L, 1L, 1L, "2025", "U", "TEST");
+
+		assertNotNull(resp);
+	}
+
+	@Test
+	void testGetDownloadSubmittedForm_emptyFiles() throws Exception {
+
+		when(homeInstructionRepo.getHIFormTransactionData(anyLong(), anyLong(), anyLong(), anyString()))
+		.thenReturn(new ArrayList<>());
+
+		Resource resp = fileUploadService.getDownloadSubmittedForm(1L, 1L, 1L, "2025", "U", "TEST");
+
+		assertTrue(resp == null);
+	}
+
+	@Test
+	void testGetDownloadSubmittedForm_exception() throws Exception {
+		when(homeInstructionRepo.getHIFormTransactionData(anyLong(), anyLong(), anyLong(), anyString()))
+				.thenThrow(new RuntimeException());
+
+		Resource resp = fileUploadService.getDownloadSubmittedForm(1L, 1L, 1L, "2025", "U", "TEST");
+
+		assertTrue(resp == null);
+	}
+
+	@Test
+	void testgetPdfFileDetailsS_success() throws Exception {
+
+		HttpServletResponse response = mock(HttpServletResponse.class);
+
+		Map<String, String> configMap = new HashMap<>();
+		configMap.put("FILETMPL", "/tmp");
+		configMap.put("PHSC_ATCH_RPT_NAME", "report_{student_id}");
+		configMap.put("PHSC_ATCH_SUB_FOLDER", "sub");
+
+		when(utility.getConfigList(anyString())).thenReturn(configMap);
+
+		when(homeInstructionRepo.getHIFormTransactionData(anyLong(), anyLong(), anyLong(), anyString()))
+				.thenReturn(Collections.emptyList());
+		HIFormTransactionResp fileResp = new HIFormTransactionResp();
+		fileResp.setFileStorageIndicator("S");
+		fileResp.setOriginalFileExtension("pdf");
+		fileResp.setEncryptedFileGuid("guid123");
+		fileResp.setOriginalFileName("test.pdf");
+
+		List<HIFormTransactionResp> responseList = new ArrayList<>();
+		responseList.add(fileResp);
+
+		// Mock existing resource
+		File file = new File("/tmp/input.zip");
+		Resource resource = mock(Resource.class);
+
+		when(homeInstructionRepo.getHIFormTransactionData(anyLong(), anyLong(), anyLong(), anyString()))
+				.thenReturn(responseList);
+
+		when(resource.getFile()).thenReturn(file);
+
+		fileUploadService.getPdfFileDetails(1L, null, null, "", null, response);
+
+	}
+
+	@Test
+	void testgetPdfFileDetailsF_success() throws Exception {
+
+		HttpServletResponse response = mock(HttpServletResponse.class);
+
+		Map<String, String> configMap = new HashMap<>();
+		configMap.put("FILETMPL", "/tmp");
+		configMap.put("PHSC_ATCH_RPT_NAME", "report_{student_id}");
+		configMap.put("PHSC_ATCH_SUB_FOLDER", "sub");
+
+		when(utility.getConfigList(anyString())).thenReturn(configMap);
+
+		when(homeInstructionRepo.getHIFormTransactionData(anyLong(), anyLong(), anyLong(), anyString()))
+				.thenReturn(Collections.emptyList());
+		HIFormTransactionResp fileResp = new HIFormTransactionResp();
+		fileResp.setFileStorageIndicator("F");
+		fileResp.setOriginalFileExtension("pdf");
+		fileResp.setEncryptedFileGuid("guid123");
+		fileResp.setOriginalFileName("test.pdf");
+
+		List<HIFormTransactionResp> responseList = new ArrayList<>();
+		responseList.add(fileResp);
+
+		// Mock existing resource
+		File file = new File("/tmp/input.zip");
+		Resource resource = mock(Resource.class);
+
+		when(homeInstructionRepo.getHIFormTransactionData(anyLong(), anyLong(), anyLong(), anyString()))
+				.thenReturn(responseList);
+
+		when(resource.getFile()).thenReturn(file);
+
+		fileUploadService.getPdfFileDetails(1L, null, null, "", null, response);
+
+	}
+
+	@Test
+	void testgetPdfFileDetails_resourceNull() {
+
+		HttpServletResponse response = mock(HttpServletResponse.class);
+
+		fileUploadService.getPdfFileDetails(1L, null, null, "", null, response);
+
+	}
+
+	@Test
+	public void testGetPdfFileDetails_localStorage_decodeFileReturnsNull() {
+
+		HIFormTransactionResp fileDetails = new HIFormTransactionResp();
+
+		when(fileDetails.getFileStorageIndicator()).thenReturn("L");
+
+		when(utility.decodeAndSaveFile(any(File.class), anyString(), anyString())).thenReturn(null);
+
+		fileUploadService.getPdfFileDetails(1L, 2L, 3L, "USER", "2025", response);
+
+		verify(utility).decodeAndSaveFile(any(File.class), eq("/tmp/template"), anyString());
+
+		verify(utility).bindTheHttpServletResponse(isNull(Resource.class), eq(response));
+	}
+
+	@Test
+	public void testGetPdfFileDetails_localStorage_decodeFileSuccessful() throws Exception {
+
+		HIFormTransactionResp fileDetails = new HIFormTransactionResp();
+
+		when(fileDetails.getFileStorageIndicator()).thenReturn("L");
+
+		File decodedFile = mock(File.class);
+		File unzippedFile = mock(File.class);
+
+		when(utility.decodeAndSaveFile(any(File.class), anyString(), anyString())).thenReturn(decodedFile);
+
+		when(utility.getUnzippedFile(eq(decodedFile), anyString(), eq("test.pdf"), eq("pdf"), eq("password"),
+				eq("/tmp/template"))).thenReturn(unzippedFile);
+
+		when(unzippedFile.toURI()).thenReturn(new File("test.pdf").toURI());
+
+		fileUploadService.getPdfFileDetails(1L, 2L, 3L, "USER", "2025", response);
+
+		verify(utility).decodeAndSaveFile(any(File.class), eq("/tmp/template"), anyString());
+
+		verify(utility).getUnzippedFile(eq(decodedFile), anyString(), eq("test.pdf"), eq("pdf"), eq("password"),
+				eq("/tmp/template"));
+
+		verify(utility).permitFileAndFolder(decodedFile);
+
+		verify(utility).bindTheHttpServletResponse(any(Resource.class), eq(response));
+	}
+
+	@Test
+	public void testGetPdfFileDetails_localStorage_deleteFileThrowsException() throws Exception {
+
+		HIFormTransactionResp fileDetails = new HIFormTransactionResp();
+
+		when(fileDetails.getFileStorageIndicator()).thenReturn("L");
+
+		File decodedFile = mock(File.class);
+		File unzippedFile = mock(File.class);
+
+		when(utility.decodeAndSaveFile(any(File.class), anyString(), anyString())).thenReturn(decodedFile);
+
+		when(utility.getUnzippedFile(eq(decodedFile), anyString(), eq("test.pdf"), eq("pdf"), eq("password"),
+				eq("/tmp/template"))).thenReturn(unzippedFile);
+
+		when(unzippedFile.toURI()).thenReturn(new File("test.pdf").toURI());
+
+		doThrow(new RuntimeException("Permission denied")).when(utility).permitFileAndFolder(decodedFile);
+
+		fileUploadService.getPdfFileDetails(1L, 2L, 3L, "USER", "2025", response);
+
+		verify(utility).permitFileAndFolder(decodedFile);
+
+		verify(utility).getUnzippedFile(eq(decodedFile), anyString(), eq("test.pdf"), eq("pdf"), eq("password"),
+				eq("/tmp/template"));
+
+		verify(utility).bindTheHttpServletResponse(any(Resource.class), eq(response));
+	}
+
+	@Test
+	public void testGetPdfFileDetails_localStorage_exception() {
+
+		HIFormTransactionResp fileDetails = new HIFormTransactionResp();
+		when(fileDetails.getFileStorageIndicator()).thenReturn("L");
+
+		when(utility.decodeAndSaveFile(any(File.class), anyString(), anyString()))
+				.thenThrow(new RuntimeException("Decode error"));
+
+		fileUploadService.getPdfFileDetails(1L, 2L, 3L, "USER", "2025", response);
+
+		verify(utility).decodeAndSaveFile(any(File.class), eq("/tmp/template"), anyString());
+
+		verify(utility).bindTheHttpServletResponse(isNull(Resource.class), eq(response));
+	}
+
+	@Test
+	void getAttachmentList_shouldReturnSuccess_whenAttachmentListIsNotEmpty() throws Exception {
+
+		Long id = 10L;
+		Long applicationId = 20L;
+		Long formMasterId = 30L;
+		String userType = "ADMIN";
+
+		HIFormTransactionResp attachment = new HIFormTransactionResp();
+
+		List<HIFormTransactionResp> attachmentList = Collections.singletonList(attachment);
+
+		when(homeInstructionRepo.getHIFormTransactionData(id, applicationId, formMasterId, userType))
+				.thenReturn(attachmentList);
+
+		GetAttachmentListResp response = fileUploadService.getAttachmentList(id, applicationId, formMasterId, userType);
+
+		assertNotNull(response);
+		assertTrue(response.isSuccess());
+
+		assertEquals(Constant.getMessageMap().get(Constant.GAT_RFS), response.getMessage());
+
+		assertEquals("2026-08-14", response.getAccessedOn());
+
+		assertEquals(attachmentList, response.getAttachmentList());
+
+		verify(homeInstructionRepo).getHIFormTransactionData(id, applicationId, formMasterId, userType);
+	}
+
+	@Test
+	void getAttachmentList_shouldReturnNotFound_whenAttachmentListIsEmpty() throws Exception {
+
+		Long id = 10L;
+		Long applicationId = 20L;
+		Long formMasterId = 30L;
+		String userType = "ADMIN";
+
+		when(homeInstructionRepo.getHIFormTransactionData(id, applicationId, formMasterId, userType))
+				.thenReturn(Collections.emptyList());
+
+		GetAttachmentListResp response = fileUploadService.getAttachmentList(id, applicationId, formMasterId, userType);
+
+		assertNotNull(response);
+		assertTrue(response.isSuccess());
+
+		assertEquals(Constant.getMessageMap().get(Constant.GAT_RNF), response.getMessage());
+
+		assertEquals("2026-08-14", response.getAccessedOn());
+
+		assertNotNull(response.getAttachmentList());
+		assertTrue(response.getAttachmentList().isEmpty());
+
+		verify(homeInstructionRepo).getHIFormTransactionData(id, applicationId, formMasterId, userType);
+	}
+
+	@Test
+	void getAttachmentList_shouldThrowHomeInstructionException_whenRepositoryThrowsException() throws Exception {
+
+		Long id = 10L;
+		Long applicationId = 20L;
+		Long formMasterId = 30L;
+		String userType = "ADMIN";
+
+		when(homeInstructionRepo.getHIFormTransactionData(id, applicationId, formMasterId, userType))
+				.thenThrow(new RuntimeException("Database error"));
+
+		HomeInstructionException exception = assertThrows(HomeInstructionException.class,
+				() -> fileUploadService.getAttachmentList(id, applicationId, formMasterId, userType));
+
+		assertNotNull(exception);
+
+		verify(homeInstructionRepo).getHIFormTransactionData(id, applicationId, formMasterId, userType);
+	}
+
+	@Test
+	void getAttachmentList_shouldThrowHomeInstructionException_whenRepositoryReturnsNull() throws Exception {
+
+		Long id = 10L;
+		Long applicationId = 20L;
+		Long formMasterId = 30L;
+		String userType = "ADMIN";
+
+		when(homeInstructionRepo.getHIFormTransactionData(id, applicationId, formMasterId, userType)).thenReturn(null);
+
+		HomeInstructionException exception = assertThrows(HomeInstructionException.class,
+				() -> fileUploadService.getAttachmentList(id, applicationId, formMasterId, userType));
+
+		assertNotNull(exception);
+	}
+
+	@Test
+	void testGetAttachmentList_SQLException() throws Exception {
+
+		when(homeInstructionRepo.getHIFormTransactionData(96L, 96L, 96L, "")).thenThrow(new Exception("DB error"));
+
+		assertThrows(HomeInstructionException.class, () -> fileUploadService.getAttachmentList(0L, 0L, 0L, ""));
+
+		verify(homeInstructionRepo, times(1)).getHIFormTransactionData(96L, 96L, 96L, "");
+	}
+
+	@Test
+	void testDeleteFormDocument_Success() throws Exception {
+
+		DeleteDocumentReq request = new DeleteDocumentReq();
+
+		request.setIndicator("D");
+		request.setId(123L);
+		request.setActivity("DELETE");
+		request.setStatus("A");
+		request.setComment("Delete document");
+		request.setApplicationId(45L);
+		request.setLoggedInUserId("user123");
+		request.setLoggedInUserPersonType("STAFF");
+
+		DocumentUpdateResp updateResponse = new DocumentUpdateResp();
+		updateResponse.setId(100L);
+		HIFormTransactionResp hIFormTransactionResp = new HIFormTransactionResp();
+
+		Mockito.when(fileUploadRepo.updateHITransactionData(Mockito.any(UploadFormDocumentReq.class)))
+				.thenReturn(Arrays.asList(updateResponse));
+
+		Mockito.when(homeInstructionRepo.getHIFormTransactionData(0L, request.getApplicationId(), 0L,
+				request.getLoggedInUserPersonType())).thenReturn(Arrays.asList(hIFormTransactionResp));
+
+		DeleteDocResponse response = fileUploadService.deleteFormDocument(request);
+
+		assertNotNull(response);
+		assertTrue(response.isSuccess());
+		assertEquals("Document deleted successfully", response.getMessage());
+
+		Mockito.verify(fileUploadRepo, Mockito.times(1))
+				.updateHITransactionData(Mockito.any(UploadFormDocumentReq.class));
+	}
+
+	@Test
+	void testDeleteFormDocument_Failure() throws Exception {
+
+		DeleteDocumentReq request = new DeleteDocumentReq();
+
+		request.setIndicator("D");
+		request.setId(123L);
+		request.setActivity("DELETE");
+		request.setStatus("A");
+		request.setComment("Delete document");
+		request.setApplicationId(45L);
+		request.setLoggedInUserId("user123");
+		request.setLoggedInUserPersonType("STAFF");
+
+		DocumentUpdateResp updateResponse = new DocumentUpdateResp();
+		updateResponse.setId(0L);
+
+		Mockito.when(fileUploadRepo.updateHITransactionData(Mockito.any(UploadFormDocumentReq.class)))
+				.thenReturn(Arrays.asList(updateResponse));
+
+		Mockito.when(homeInstructionRepo.getHIFormTransactionData(0L, request.getApplicationId(), 0L,
+				request.getLoggedInUserPersonType())).thenReturn(null);
+
+		DeleteDocResponse response = fileUploadService.deleteFormDocument(request);
+
+		assertNotNull(response);
+		assertFalse(response.isSuccess());
+		assertEquals("Document deletion failed", response.getMessage());
+
+		Mockito.verify(fileUploadRepo, Mockito.times(1))
+				.updateHITransactionData(Mockito.any(UploadFormDocumentReq.class));
+	}
+
+	@Test
+	void testDeleteFormDocument_EmptyResponse() throws Exception {
+
+		DeleteDocumentReq request = new DeleteDocumentReq();
+
+		Mockito.when(fileUploadRepo.updateHITransactionData(Mockito.any(UploadFormDocumentReq.class)))
+				.thenReturn(Collections.emptyList());
+
+		DeleteDocResponse response = fileUploadService.deleteFormDocument(request);
+
+		assertNotNull(response);
+		assertFalse(response.isSuccess());
+		assertEquals("Document deletion failed", response.getMessage());
+	}
+
+	@Test
+	void testDeleteFormDocument_NullResponse() throws Exception {
+
+		DeleteDocumentReq request = new DeleteDocumentReq();
+
+		Mockito.when(fileUploadRepo.updateHITransactionData(Mockito.any(UploadFormDocumentReq.class))).thenReturn(null);
+
+		DeleteDocResponse response = fileUploadService.deleteFormDocument(request);
+
+		assertNotNull(response);
+		assertFalse(response.isSuccess());
+		assertEquals("Document deletion failed", response.getMessage());
+	}
+
+	@Test
+	void testDeleteFormDocument_Exception() throws Exception {
+
+		DeleteDocumentReq request = new DeleteDocumentReq();
+
+		Mockito.when(fileUploadRepo.updateHITransactionData(Mockito.any(UploadFormDocumentReq.class)))
+				.thenThrow(new RuntimeException("Database error"));
+
+		HomeInstructionException exception = assertThrows(HomeInstructionException.class,
+				() -> fileUploadService.deleteFormDocument(request));
+
+		assertEquals("Database error", exception.getMessage());
+
+		Mockito.verify(fileUploadRepo, Mockito.times(1))
+				.updateHITransactionData(Mockito.any(UploadFormDocumentReq.class));
+	}
+
+	@TempDir
+	Path tempDir1;
+
+	private MultipartFile file;
+
+	@Test
+	void getFormPdfDetails_success_shouldGenerateAndBindPdf() throws Exception {
+
+		Map<String, String> configMap = new HashMap<>(config);
+		configMap.put("FILETMPL", tempDir1.toString());
+		configMap.put("TEMPL_PATH", tempDir1.toString());
+
+		when(utility.getConfigList(anyString())).thenReturn(configMap);
+
+		Form1AphirDataResp formData = new Form1AphirDataResp();
+		List<Form1AphirDataResp> dataList = Arrays.asList(formData);
+
+		List<Form1AphirScheduleResp> scheduleData = new ArrayList<>();
+
+		when(homeInstructionRepo.getForm1AphirData(100L, 1L, null)).thenReturn(dataList);
+
+		when(homeInstructionRepo.getForm1AphirScheduleData(100L)).thenReturn(scheduleData);
+
+		/*
+		 * Simulate successful HTML generation.
+		 */
+		when(utility.downloadPdfForm(eq(formData), any(StringBuilder.class), eq("APHIR"), anyString(),
+				eq(scheduleData))).thenAnswer(invocation -> {
+					StringBuilder html = invocation.getArgument(1, StringBuilder.class);
+
+					html.append("<html><body>Test PDF</body></html>");
+					return true;
+				});
+
+		/*
+		 * generatePDF() is mocked, but we create the expected PDF file so that
+		 * getFormPdfDetails() sees a valid generated file.
+		 */
+		doAnswer(invocation -> {
+			String outputPath = invocation.getArgument(1, String.class);
+
+			File pdfFile = new File(outputPath);
+
+			return null;
+		}).when(utility).generatePDF(anyString(), anyString());
+
+		fileUploadService.getFormPdfDetails(100L, 1L, "APHIR", null, response);
+
+		verify(homeInstructionRepo).getForm1AphirData(100L, 1L, null);
+
+		verify(homeInstructionRepo).getForm1AphirScheduleData(100L);
+
+		verify(utility).downloadPdfForm(eq(formData), any(StringBuilder.class), eq("APHIR"), anyString(),
+				eq(scheduleData));
+
+		verify(utility).generatePDF(anyString(), anyString());
+
+		verify(utility).bindTheHttpServletResponse(any(Resource.class), eq(response));
+
+		assertFalse(Files.exists(tempDir1.resolve("ModiFied_HI_APPLN_APHIR.html")));
+	}
+
+	@Test
+	void getFormPdfDetails_aphia_shouldUseAphiaTemplate() throws Exception {
+
+		Map<String, String> configMap = new HashMap<>(config);
+		configMap.put("FILETMPL", tempDir1.toString());
+		configMap.put("TEMPL_PATH", tempDir1.toString());
+		configMap.put("HI_APPLN_HTML_APHIA", "APHIA_TEMPLATE.html");
+
+		when(utility.getConfigList(anyString())).thenReturn(configMap);
+
+		Form1AphirDataResp formData = new Form1AphirDataResp();
+		List<Form1AphirDataResp> dataList = Arrays.asList(formData);
+		List<Form1AphirScheduleResp> scheduleData = new ArrayList<>();
+
+		when(homeInstructionRepo.getForm1AphirData(100L, 1L, null)).thenReturn(dataList);
+
+		when(homeInstructionRepo.getForm1AphirScheduleData(100L)).thenReturn(scheduleData);
+
+		when(utility.downloadPdfForm(eq(formData), any(StringBuilder.class), eq("APHIA"),
+				eq(tempDir1.resolve("APHIA_TEMPLATE.html").toString()), eq(scheduleData))).thenAnswer(invocation -> {
+					StringBuilder html = invocation.getArgument(1, StringBuilder.class);
+					html.append("<html>APHIA</html>");
+					return true;
+				});
+
+		doAnswer(invocation -> {
+			String outputPath = invocation.getArgument(1, String.class);
+
+			return null;
+		}).when(utility).generatePDF(anyString(), anyString());
+
+		fileUploadService.getFormPdfDetails(100L, 1L, "APHIA", null, response);
+
+		verify(utility).downloadPdfForm(eq(formData), any(StringBuilder.class), eq("APHIA"),
+				eq(tempDir1.resolve("APHIA_TEMPLATE.html").toString()), eq(scheduleData));
+
+		verify(utility).generatePDF(anyString(), anyString());
+
+		verify(utility).bindTheHttpServletResponse(any(Resource.class), eq(response));
+	}
+
+	@Test
+	void getFormPdfDetails_noData_shouldThrowHomeInstructionException() {
+
+		Map<String, String> configMap = new HashMap<>(config);
+		configMap.put("FILETMPL", tempDir1.toString());
+		configMap.put("TEMPL_PATH", tempDir1.toString());
+
+		when(utility.getConfigList(anyString())).thenReturn(configMap);
+
+		when(homeInstructionRepo.getForm1AphirData(100L, 1L, null)).thenReturn(Collections.emptyList());
+
+		HomeInstructionException exception = assertThrows(HomeInstructionException.class,
+				() -> fileUploadService.getFormPdfDetails(100L, 1L, "APHIR", null, response));
+
+		assertEquals("Unable to fetch updated Form1 APHIR data.", exception.getMessage());
+
+		verify(homeInstructionRepo).getForm1AphirData(100L, 1L, null);
+
+		verify(utility, Mockito.never()).generatePDF(anyString(), anyString());
+	}
+
+	@Test
+	void getFormPdfDetails_downloadPdfFormFailure_shouldThrowException() {
+
+		Map<String, String> configMap = new HashMap<>(config);
+		configMap.put("FILETMPL", tempDir1.toString());
+		configMap.put("TEMPL_PATH", tempDir1.toString());
+
+		when(utility.getConfigList(anyString())).thenReturn(configMap);
+
+		Form1AphirDataResp formData = new Form1AphirDataResp();
+
+		when(homeInstructionRepo.getForm1AphirData(100L, 1L, null)).thenReturn(Arrays.asList(formData));
+
+		when(homeInstructionRepo.getForm1AphirScheduleData(100L)).thenReturn(Collections.emptyList());
+
+		when(utility.downloadPdfForm(eq(formData), any(StringBuilder.class), eq("APHIR"), anyString(), anyList()))
+				.thenReturn(false);
+
+		HomeInstructionException exception = assertThrows(HomeInstructionException.class,
+				() -> fileUploadService.getFormPdfDetails(100L, 1L, "APHIR", null, response));
+
+		assertEquals("Unable to generate PDF for form : APHIR", exception.getMessage());
+
+		verify(utility, Mockito.never()).generatePDF(anyString(), anyString());
+	}
+
+	@Test
+	void getFormPdfDetails_pdfNotGenerated_shouldThrowException() throws Exception {
+
+		Map<String, String> configMap = new HashMap<>(config);
+		configMap.put("FILETMPL", tempDir1.toString());
+		configMap.put("TEMPL_PATH", tempDir1.toString());
+
+		when(utility.getConfigList(anyString())).thenReturn(configMap);
+
+		Form1AphirDataResp formData = new Form1AphirDataResp();
+
+		when(homeInstructionRepo.getForm1AphirData(100L, 1L, null)).thenReturn(Arrays.asList(formData));
+
+		when(homeInstructionRepo.getForm1AphirScheduleData(100L)).thenReturn(Collections.emptyList());
+
+		when(utility.downloadPdfForm(eq(formData), any(StringBuilder.class), eq("APHIR"), anyString(), anyList()))
+				.thenAnswer(invocation -> {
+					StringBuilder html = invocation.getArgument(1, StringBuilder.class);
+
+					html.append("<html>Test</html>");
+					return true;
+				});
+
+		/*
+		 * Do nothing, therefore HI_APPLN_APHIR.pdf is not created.
+		 */
+		doAnswer(invocation -> null).when(utility).generatePDF(anyString(), anyString());
+
+		HomeInstructionException exception = assertThrows(HomeInstructionException.class,
+				() -> fileUploadService.getFormPdfDetails(100L, 1L, "APHIR", null, response));
+
+		assertEquals("PDF file was not generated for form: APHIR", exception.getMessage());
+
+		verify(utility).generatePDF(anyString(), anyString());
+	}
+
+	@Test
+	void getFormPdfDetails_unexpectedException_shouldWrapException() {
+
+	    when(utility.getConfigList(anyString()))
+	            .thenThrow(new RuntimeException("Configuration error"));
+
+	    HomeInstructionException exception =
+	            assertThrows(
+	                    HomeInstructionException.class,
+	                    () -> fileUploadService.getFormPdfDetails(
+	                            100L, 1L,
+	                            "APHIR",
+	                            null, response));
+
+	    assertEquals(
+	            "Unable to generate PDF for form: APHIR",
+	            exception.getMessage());
+
+	    assertNotNull(exception.getCause());
+	    assertEquals(
+	            "Configuration error",
+	            exception.getCause().getMessage());
+	}
+
+	@Test
+	void getFormPdfDetails_success_shouldBindResponseAndDeleteHtml() throws Exception {
+
+		Map<String, String> configMap = new HashMap<>();
+		configMap.put("FILETMPL", tempDir1.toString());
+		configMap.put("TEMPL_PATH", tempDir1.toString());
+		configMap.put("HI_APPLN_HTML_APHIA", "HI_APPLN_APHIA.html");
+
+		when(utility.getConfigList(anyString())).thenReturn(configMap);
+
+		Form1AphirDataResp formData = new Form1AphirDataResp();
+		List<Form1AphirDataResp> dataList = Collections.singletonList(formData);
+
+		List<Form1AphirScheduleResp> scheduleData = Collections.emptyList();
+
+		when(homeInstructionRepo.getForm1AphirData(100L, 1L, null)).thenReturn(dataList);
+
+		when(homeInstructionRepo.getForm1AphirScheduleData(100L)).thenReturn(scheduleData);
+
+		when(utility.downloadPdfForm(eq(formData), any(StringBuilder.class), eq("APHIR"), anyString(),
+				eq(scheduleData))).thenAnswer(invocation -> {
+					StringBuilder html = invocation.getArgument(1, StringBuilder.class);
+
+					html.append("<html><body>Test</body></html>");
+					return true;
+				});
+
+		HttpServletResponse result = fileUploadService.getFormPdfDetails(100L, 1L, "APHIR", null, response);
+
+		assertNotNull(result);
+		assertEquals(response, result);
+
+		verify(utility).bindTheHttpServletResponse(any(Resource.class), eq(response));
+
+		File modifiedHtmlFile = tempDir1.resolve("ModiFied_HI_APPLN_APHIR.html").toFile();
+
+		assertFalse(modifiedHtmlFile.exists());
+	}
+
+	@Test
+	void testGetPdfFileDetails_S3Storage_Success() throws Exception {
+
+		Map<String, String> configMap = new HashMap<>();
+		configMap.put("FPATH", tempDir.toString());
+		configMap.put("FILETMPL", tempDir.toString());
+		configMap.put("S3LIBBKTNAME", "bucket");
+		configMap.put("S3ACCESSKEY", "access");
+		configMap.put("S3SECRETKEY", "secret");
+		configMap.put("S3BUCKETREGION", "region");
+		configMap.put("S3BUCKETFOLDER", "bucket-folder");
+		configMap.put("FORM_SUB_FOLDER", "forms");
+
+		when(utility.getConfigList(anyString())).thenReturn(configMap);
+
+		HIFormTransactionResp fileResp = new HIFormTransactionResp();
+
+		fileResp.setFileStorageIndicator("S");
+		fileResp.setOriginalFileExtension("pdf");
+		fileResp.setEncryptedFileGuid("guid123.txt");
+		fileResp.setOriginalFileName("test.pdf");
+		fileResp.setApplicationId(100L);
+
+		List<HIFormTransactionResp> responseList = new ArrayList<>();
+		responseList.add(fileResp);
+
+		when(homeInstructionRepo.getHIFormTransactionData(anyLong(), anyLong(), anyLong(), anyString()))
+				.thenReturn(responseList);
+
+		when(utility.getDocEncPass("100")).thenReturn("password");
+
+		File decodedFile = File.createTempFile("decoded", ".pdf");
+
+		when(utility.downloadFromS3AsStream(anyString(), anyString(), anyString(), anyString(), anyString(),
+				anyString(), anyString(), anyBoolean(), anyString(), anyString(), anyString(), anyString()))
+				.thenReturn(decodedFile);
+
+		HttpServletResponse response = mock(HttpServletResponse.class);
+
+		HttpServletResponse result = fileUploadService.getPdfFileDetails(1L, 100L, 1L, "", "2025", response);
+
+		assertNotNull(result);
+
+		verify(utility).downloadFromS3AsStream(eq("access"), eq("secret"), eq("bucket"), eq("bucket-folder/forms/2025"),
+				eq("region"), eq("guid123"), eq("test.pdf"), eq(false), eq("guid123.pdf"), eq("pdf"), eq("password"),
+				eq(tempDir.toString()));
+
+		verify(utility).bindTheHttpServletResponse(any(Resource.class), eq(response));
+	}
+
+	@Test
+	void testGetPdfFileDetails_LocalStorage_Success() throws Exception {
+
+		Map<String, String> configMap = new HashMap<>();
+		configMap.put("FPATH", tempDir.toString());
+		configMap.put("FILETMPL", tempDir.toString());
+		configMap.put("FORM_SUB_FOLDER", "forms");
+
+		when(utility.getConfigList(anyString())).thenReturn(configMap);
+
+		HIFormTransactionResp fileResp = new HIFormTransactionResp();
+
+		fileResp.setFileStorageIndicator("L");
+		fileResp.setOriginalFileExtension("pdf");
+		fileResp.setEncryptedFileGuid("guid123.txt");
+		fileResp.setOriginalFileName("test.pdf");
+		fileResp.setApplicationId(100L);
+
+		List<HIFormTransactionResp> responseList = Collections.singletonList(fileResp);
+
+		when(homeInstructionRepo.getHIFormTransactionData(anyLong(), anyLong(), anyLong(), anyString()))
+				.thenReturn(responseList);
+
+		when(utility.getDocEncPass("100")).thenReturn("password");
+
+		File decodedFile = File.createTempFile("decoded", ".zip");
+
+		File unzippedFile = File.createTempFile("unzipped", ".pdf");
+
+		when(utility.decodeAndSaveFile(any(File.class), eq(tempDir.toString()), anyString())).thenReturn(decodedFile);
+
+		when(utility.getUnzippedFile(eq(decodedFile), anyString(), eq("test.pdf"), eq("pdf"), eq("password"),
+				eq(tempDir.toString()))).thenReturn(unzippedFile);
+
+		HttpServletResponse response = mock(HttpServletResponse.class);
+
+		HttpServletResponse result = fileUploadService.getPdfFileDetails(1L, 100L, 1L, "", "2025", response);
+
+		assertNotNull(result);
+
+		verify(utility).decodeAndSaveFile(any(File.class), eq(tempDir.toString()), anyString());
+
+		verify(utility).getUnzippedFile(eq(decodedFile), anyString(), eq("test.pdf"), eq("pdf"), eq("password"),
+				eq(tempDir.toString()));
+
+		verify(utility).permitFileAndFolder(decodedFile);
+
+		verify(utility).bindTheHttpServletResponse(any(Resource.class), eq(response));
+	}
+
+	@Test
+	void testGetFormPdfDetails_Exception() {
+
+		String formAbbreviation = "APHIR";
+
+		Map<String, String> config = new HashMap<>();
+		config.put("TEMPL_PATH", "/tmp");
+		config.put("FILETMPL", "/tmp");
+
+		when(utility.getConfigList(anyString())).thenReturn(config);
+
+		Form1AphirDataResp data = new Form1AphirDataResp();
+
+		when(homeInstructionRepo.getForm1AphirData(anyLong(), anyLong(), formAbbreviation))
+				.thenReturn(Collections.singletonList(data));
+
+		when(homeInstructionRepo.getForm1AphirScheduleData(anyLong())).thenReturn(Collections.emptyList());
+
+		when(utility.downloadPdfForm(any(Form1AphirDataResp.class), any(StringBuilder.class), eq(formAbbreviation),
+				anyString(), anyList())).thenThrow(new RuntimeException("PDF generation error"));
+
+		HttpServletResponse response = mock(HttpServletResponse.class);
+
+		HomeInstructionException exception = assertThrows(HomeInstructionException.class,
+				() -> fileUploadService.getFormPdfDetails(1L, 1L, formAbbreviation, formAbbreviation, response));
+
+		assertEquals("Unable to generate PDF for form: " + formAbbreviation, exception.getMessage());
+	}
+
+	@Test
+	void testGetPdfFileDetails_urlResourceException() throws Exception {
+
+		Map<String, String> configMap = new HashMap<>();
+		configMap.put("FILETMPL", "/tmp");
+		configMap.put("FPATH", "/tmp");
+		configMap.put("FORM_SUB_FOLDER", "");
+
+		when(utility.getConfigList(anyString())).thenReturn(configMap);
+
+		HIFormTransactionResp fileResp = new HIFormTransactionResp();
+
+		fileResp.setFileStorageIndicator("S");
+		fileResp.setOriginalFileExtension("pdf");
+		fileResp.setEncryptedFileGuid("guid123.txt");
+		fileResp.setOriginalFileName("test.pdf");
+		fileResp.setApplicationId(100L);
+
+		when(homeInstructionRepo.getHIFormTransactionData(anyLong(), anyLong(), anyLong(), anyString()))
+				.thenReturn(Collections.singletonList(fileResp));
+
+		when(utility.getDocEncPass("100")).thenReturn("password");
+
+		File decodedFile = mock(File.class);
+
+		when(decodedFile.exists()).thenReturn(true);
+
+		when(utility.downloadFromS3AsStream(anyString(), anyString(), anyString(), anyString(), anyString(),
+				anyString(), anyString(), anyBoolean(), anyString(), anyString(), anyString(), anyString()))
+				.thenReturn(decodedFile);
+
+		when(decodedFile.toURI()).thenThrow(new RuntimeException("URI creation failed"));
+
+		HttpServletResponse response = mock(HttpServletResponse.class);
+
+		HomeInstructionException exception = assertThrows(HomeInstructionException.class,
+				() -> fileUploadService.getPdfFileDetails(1L, 100L, 1L, "", "2025", response));
+
+		assertNotNull(exception);
+
+		assertEquals("URI creation failed", exception.getMessage());
+
+		verify(decodedFile).toURI();
+
+		verify(utility, never()).bindTheHttpServletResponse(any(), any());
+	}
+
+	@Test
+	void getPdfFileDetails_whenResourceCreationFails_shouldThrowHomeInstructionException() throws Exception {
+
+		Map<String, String> configMap = new HashMap<>();
+		configMap.put("FILETMPL", tempDir.toString());
+
+		when(utility.getConfigList(anyString())).thenReturn(configMap);
+
+		HIFormTransactionResp fileResp = new HIFormTransactionResp();
+		fileResp.setFileStorageIndicator("L");
+		fileResp.setOriginalFileExtension("pdf");
+		fileResp.setEncryptedFileGuid("guid123.txt");
+		fileResp.setOriginalFileName("test.pdf");
+		fileResp.setApplicationId(100L);
+
+		when(homeInstructionRepo.getHIFormTransactionData(anyLong(), anyLong(), anyLong(), anyString()))
+				.thenReturn(Collections.singletonList(fileResp));
+
+		when(utility.getDocEncPass(anyString())).thenReturn("password");
+
+		File badFile = mock(File.class);
+
+		when(utility.decodeAndSaveFile(any(File.class), anyString(), anyString())).thenReturn(badFile);
+
+		File unzippedFile = mock(File.class);
+
+		when(utility.getUnzippedFile(any(File.class), anyString(), anyString(), anyString(), anyString(), anyString()))
+				.thenReturn(unzippedFile);
+
+		when(unzippedFile.toURI()).thenThrow(new RuntimeException("Unable to create URI"));
+
+		HomeInstructionException exception = assertThrows(HomeInstructionException.class,
+				() -> fileUploadService.getPdfFileDetails(1L, 1L, 1L, "", "2025", response));
+
+		assertEquals("Unable to create URI", exception.getMessage());
+
+		assertEquals("Internal server error", exception.getErrorCode());
+
+		assertNotNull(exception.getCause());
+		assertEquals("Unable to create URI", exception.getCause().getMessage());
+	}
+
+	@Test
+	void testGetApplicationTrackingPdfDetails_Success() throws Exception {
+
+		ApplicationTrackingRequest request = new ApplicationTrackingRequest();
+
+		ApplicationTrackingDataList data = new ApplicationTrackingDataList();
+
+		List<ApplicationTrackingDataList> dataList = new ArrayList<>();
+
+		dataList.add(data);
+
+		request.setApplicationTrackingDataList(dataList);
+
+		Map<String, String> configMap = new HashMap<>();
+		configMap.put("TEMPL_PATH", tempDir.toString());
+		configMap.put("FILETMPL", tempDir.toString());
+
+		Mockito.when(utility.getConfigList(Mockito.anyString())).thenReturn(configMap);
+
+		File templateFile = new File(tempDir.toFile(), "HI_APPLN_TEST.html");
+
+		FileUtils.writeStringToFile(templateFile, "<html><body>Test PDF</body></html>", StandardCharsets.UTF_8);
+
+		Mockito.when(utility.downloadPdfForm(Mockito.eq(dataList), Mockito.any(StringBuilder.class), Mockito.eq("TEST"),
+				Mockito.eq(templateFile.getAbsolutePath()), Mockito.isNull())).thenAnswer(invocation -> {
+
+					StringBuilder html = invocation.getArgument(1);
+
+					html.append("<html><body>Test PDF</body></html>");
+
+					return true;
+				});
+
+		Mockito.doAnswer(invocation -> {
+
+			String outputPath = invocation.getArgument(1);
+
+			File pdfFile = new File(outputPath);
+
+			FileUtils.writeByteArrayToFile(pdfFile, "Fake PDF Content".getBytes(StandardCharsets.UTF_8));
+
+			return null;
+
+		}).when(utility).generatePDF(Mockito.anyString(), Mockito.anyString());
+
+		HttpServletResponse response = fileUploadService.getApplicationTrackingPdfDetails(request, null);
+
+		assertNotNull(response);
+
+		Mockito.verify(utility).getConfigList(Mockito.anyString());
+
+		Mockito.verify(utility).downloadPdfForm(Mockito.eq(dataList), Mockito.any(StringBuilder.class),
+				Mockito.eq("TEST"), Mockito.eq(templateFile.getAbsolutePath()), Mockito.isNull());
+
+		Mockito.verify(utility).generatePDF(Mockito.anyString(), Mockito.anyString());
+	}
+
+	@Test
+	void testGetApplicationTrackingPdfDetails_UnexpectedException() {
+
+		ApplicationTrackingRequest request = new ApplicationTrackingRequest();
+
+		Mockito.when(utility.getConfigList(Mockito.anyString())).thenThrow(new RuntimeException("Configuration error"));
+
+		HomeInstructionException exception = assertThrows(HomeInstructionException.class,
+				() -> fileUploadService.getApplicationTrackingPdfDetails(request, null));
+
+		assertEquals("Unable to generate PDF for form: TEST", exception.getMessage());
+
+		assertNotNull(exception.getCause());
+		assertEquals("Configuration error", exception.getCause().getMessage());
+	}
+
+	@Test
+	void testGetApplicationTrackingPdfDetails_Exception() {
+
+		ApplicationTrackingRequest request = new ApplicationTrackingRequest();
+
+		List<ApplicationTrackingDataList> dataList = new ArrayList<>();
+
+		dataList.add(new ApplicationTrackingDataList());
+
+		request.setApplicationTrackingDataList(dataList);
+
+		Map<String, String> configMap = new HashMap<>();
+		configMap.put("TEMPL_PATH", "templatePath");
+		configMap.put("FILETMPL", "tempPath");
+
+		Mockito.when(utility.getConfigList(Mockito.anyString())).thenReturn(configMap);
+
+		Mockito.when(utility.downloadPdfForm(Mockito.eq(dataList), Mockito.any(StringBuilder.class),
+				Mockito.eq("LAHIT"), Mockito.anyString(), Mockito.isNull()))
+				.thenThrow(new RuntimeException("PDF generation error"));
+
+		HomeInstructionException exception = assertThrows(HomeInstructionException.class,
+				() -> fileUploadService.getApplicationTrackingPdfDetails(request, null));
+
+		assertEquals("Unable to generate PDF for form: LAHIT", exception.getMessage());
+
+		assertNotNull(exception.getCause());
+
+		assertEquals("PDF generation error", exception.getCause().getMessage());
+	}
+
+	@Test
+	void get30DHIPDFDetails_success() throws Exception {
+
+		DHIRequest request = new DHIRequest();
+		request.setApplicationId(123L);
+		request.setNoticeDate("08/19/2026");
+		request.setNurseName("Test Nurse");
+
+		Map<String, String> config = new HashMap<>();
+		config.put("FILETMPL", "target/test-files");
+		config.put("TEMPL_PATH", "src/test/resources/templates");
+		config.put("HI_APPLN_TRACKING_HTML", "tracking.html");
+
+		when(utility.getConfigList("FILETMPL,TEMPL_PATH,HI_APPLN_TRACKING_HTML")).thenReturn(config);
+
+		ApplicationInfoResp applicationInfo = new ApplicationInfoResp();
+		applicationInfo.setStudentId(1L);
+		applicationInfo.setStudentName("John Doe");
+		applicationInfo.setStudentGrade("5");
+
+		GetPhysicianInfoResp physicianInfo = new GetPhysicianInfoResp();
+		physicianInfo.setPhysicianName("Dr. Smith");
+		physicianInfo.setPhysicianSignDate("08/18/2026");
+
+		when(homeInstructionRepo.getApplicationInfoData(123L, null))
+				.thenReturn(Collections.singletonList(applicationInfo));
+
+		when(homeInstructionRepo.getPhysicianInfoData(123L)).thenReturn(Collections.singletonList(physicianInfo));
+
+		doAnswer(invocation -> {
+			StringBuilder html = invocation.getArgument(1);
+			html.append("<html><body>Test PDF</body></html>");
+			return true;
+		}).when(utility).downloadPdfForm(any(Form630DhiDataResp.class), any(StringBuilder.class), eq("30DHI"),
+				anyString(), isNull());
+
+		doNothing().when(utility).generatePDF(anyString(), anyString());
+
+		doNothing().when(utility).bindTheHttpServletResponse(any(Resource.class), eq(response));
+
+		HttpServletResponse result = fileUploadService.get30DHIPDFDetails(request, response);
+
+		assertSame(response, result);
+
+		verify(homeInstructionRepo).getApplicationInfoData(123L, null);
+		verify(homeInstructionRepo).getPhysicianInfoData(123L);
+
+		verify(utility).downloadPdfForm(any(Form630DhiDataResp.class), any(StringBuilder.class), eq("30DHI"),
+				contains("HI_APPLN_30DHI.html"), isNull());
+
+		verify(utility).generatePDF(contains("ModifiedHI_APPLN_30DHI.html"), contains("HI_APPLN_30DHI.pdf"));
+
+		verify(utility).bindTheHttpServletResponse(any(Resource.class), eq(response));
+	}
+
+	@Test
+	void testGetForm760DHIPDFDetails_Success() throws Exception {
+
+		DHIRequest request = new DHIRequest(100L, "2026-08-19", "Dr. Smith", "", null);
+
+		ApplicationInfoResp appInfo = new ApplicationInfoResp();
+		appInfo.setStudentId(100L);
+		appInfo.setStudentName("John Doe");
+		appInfo.setStudentGrade("10");
+
+		GetPhysicianInfoResp physicianInfo = new GetPhysicianInfoResp();
+		physicianInfo.setPhysicianName("Dr. Smith");
+		physicianInfo.setPhysicianSignDate("2026-08-19");
+
+		List<ApplicationInfoResp> appInfoData = new ArrayList<>();
+		appInfoData.add(appInfo);
+
+		List<GetPhysicianInfoResp> physcData = new ArrayList<>();
+		physcData.add(physicianInfo);
+
+		Map<String, String> configMap = new HashMap<>();
+		configMap.put("TEMPL_PATH", tempDir.toString());
+		configMap.put("FILETMPL", tempDir.toString());
+
+		Mockito.when(utility.getConfigList(Mockito.anyString())).thenReturn(configMap);
+
+		Mockito.when(homeInstructionRepo.getApplicationInfoData(100L, null)).thenReturn(appInfoData);
+
+		Mockito.when(homeInstructionRepo.getPhysicianInfoData(100L)).thenReturn(physcData);
+
+		Mockito.when(utility.downloadPdfForm(Mockito.eq(appInfoData.get(0)), Mockito.any(StringBuilder.class),
+				Mockito.eq("60DHI"), Mockito.eq(tempDir.toString() + File.separator + "HI_APPLN_60DHI.html"),
+				Mockito.isNull())).thenAnswer(invocation -> {
+
+					StringBuilder html = invocation.getArgument(1);
+					html.append("<html><body>Test PDF</body></html>");
+
+					return true;
+				});
+
+		Mockito.doAnswer(invocation -> {
+
+			String outputPath = invocation.getArgument(1);
+
+			File pdfFile = new File(outputPath);
+
+			FileUtils.writeByteArrayToFile(pdfFile, "Fake PDF Content".getBytes(StandardCharsets.UTF_8));
+
+			return null;
+
+		}).when(utility).generatePDF(Mockito.anyString(), Mockito.anyString());
+
+		Mockito.doNothing().when(utility).bindTheHttpServletResponse(Mockito.any(Resource.class), Mockito.eq(response));
+
+		HttpServletResponse result = fileUploadService.getForm760DHIPDFDetails(request, response);
+
+		assertNotNull(result);
+		assertEquals(response, result);
+
+		Mockito.verify(utility).getConfigList(Mockito.anyString());
+
+		Mockito.verify(homeInstructionRepo).getApplicationInfoData(100L, null);
+
+		Mockito.verify(homeInstructionRepo).getPhysicianInfoData(100L);
+
+		Mockito.verify(utility).downloadPdfForm(Mockito.eq(appInfoData.get(0)), Mockito.any(StringBuilder.class),
+				Mockito.eq("60DHI"), Mockito.eq(tempDir.toString() + File.separator + "HI_APPLN_60DHI.html"),
+				Mockito.isNull());
+
+		Mockito.verify(utility).generatePDF(Mockito.anyString(), Mockito.anyString());
+
+		Mockito.verify(utility).bindTheHttpServletResponse(Mockito.any(Resource.class), Mockito.eq(response));
+	}
+
+	@Test
+	void testGetForm760DHIPDFDetails_UnexpectedException() {
+
+		DHIRequest request = new DHIRequest(100L, "2026-08-19", "Dr. Smith", "", null);
+
+		Mockito.when(utility.getConfigList(Mockito.anyString())).thenThrow(new RuntimeException("Configuration error"));
+
+		HomeInstructionException exception = assertThrows(HomeInstructionException.class,
+				() -> fileUploadService.getForm760DHIPDFDetails(request, response));
+
+		assertEquals("Unable to generate PDF for form: 60DHI", exception.getMessage());
+
+		assertNotNull(exception.getCause());
+
+		assertEquals("Configuration error", exception.getCause().getMessage());
+	}
+
+	@Test
+	void testGetForm760DHIPDFDetails_Exception() throws Exception {
+
+		DHIRequest request = new DHIRequest(100L, "2026-08-19", "Dr. Smith", "", null);
+
+		ApplicationInfoResp appInfo = new ApplicationInfoResp();
+		appInfo.setStudentId(100L);
+		appInfo.setStudentName("John Doe");
+		appInfo.setStudentGrade("10");
+
+		GetPhysicianInfoResp physicianInfo = new GetPhysicianInfoResp();
+		physicianInfo.setPhysicianName("Dr. Smith");
+		physicianInfo.setPhysicianSignDate("2026-08-19");
+
+		List<ApplicationInfoResp> appInfoData = new ArrayList<>();
+		appInfoData.add(appInfo);
+
+		List<GetPhysicianInfoResp> physcData = new ArrayList<>();
+		physcData.add(physicianInfo);
+
+		Map<String, String> configMap = new HashMap<>();
+		configMap.put("TEMPL_PATH", tempDir.toString());
+		configMap.put("FILETMPL", tempDir.toString());
+
+		Mockito.when(utility.getConfigList(Mockito.anyString())).thenReturn(configMap);
+
+		Mockito.when(homeInstructionRepo.getApplicationInfoData(100L, null)).thenReturn(appInfoData);
+
+		Mockito.when(homeInstructionRepo.getPhysicianInfoData(100L)).thenReturn(physcData);
+
+		Mockito.when(utility.downloadPdfForm(Mockito.eq(appInfoData.get(0)), Mockito.any(StringBuilder.class),
+				Mockito.eq("60DHI"), Mockito.anyString(), Mockito.isNull()))
+				.thenThrow(new RuntimeException("PDF generation error"));
+
+		HomeInstructionException exception = assertThrows(HomeInstructionException.class,
+				() -> fileUploadService.getForm760DHIPDFDetails(request, response));
+
+		assertEquals("Unable to generate PDF for form: 60DHI", exception.getMessage());
+
+		assertNotNull(exception.getCause());
+
+		assertEquals("PDF generation error", exception.getCause().getMessage());
+
+		Mockito.verify(utility).downloadPdfForm(Mockito.eq(appInfoData.get(0)), Mockito.any(StringBuilder.class),
+				Mockito.eq("60DHI"), Mockito.anyString(), Mockito.isNull());
+	}
+
+	@Test
+	void getFormPdfDetails_shouldThrowHomeInstructionException_whenDataEmpty() {
+
+		Map<String, String> config = new HashMap<>();
+		config.put("TEMPL_PATH", "/tmp");
+		config.put("HI_APPLN_HTML_APHIA", "HI_APPLN_APHIA.html");
+		config.put("FILETMPL", "/tmp");
+
+		when(utility.getConfigList(anyString())).thenReturn(config);
+
+		when(homeInstructionRepo.getForm1AphirData(1L, 1L, null)).thenReturn(new ArrayList<>());
+
+		HttpServletResponse response = mock(HttpServletResponse.class);
+
+		assertThrows(HomeInstructionException.class,
+				() -> fileUploadService.getFormPdfDetails(1L, 1L, "APHIA", null, response));
+	}
+
+	@Test
+	void getApplicationTrackingPdfDetails_shouldThrowException_whenDataEmpty() {
+
+		Map<String, String> config = new HashMap<>();
+		config.put("TEMPL_PATH", System.getProperty("java.io.tmpdir"));
+		config.put("FILETMPL", System.getProperty("java.io.tmpdir"));
+		config.put("HI_APPLN_TRACKING_HTML", "tracking.html");
+
+		when(utility.getConfigList(anyString())).thenReturn(config);
+
+		ApplicationTrackingRequest request = mock(ApplicationTrackingRequest.class);
+
+		when(request.getApplicationTrackingDataList()).thenReturn(new ArrayList<>());
+
+		HttpServletResponse response = mock(HttpServletResponse.class);
+
+		assertThrows(HomeInstructionException.class, () -> service.getApplicationTrackingPdfDetails(request, response));
+	}
+
+	@Test
+	void get30DHIPDFDetails_shouldThrowException_whenApplicationDataEmpty() throws Exception {
+
+		Map<String, String> config = new HashMap<>();
+		config.put("FILETMPL", "/tmp");
+		config.put("TEMPL_PATH", "/tmp");
+		config.put("HI_APPLN_TRACKING_HTML", "tracking.html");
+
+		when(utility.getConfigList(anyString())).thenReturn(config);
+
+		DHIRequest request = new DHIRequest();
+		request.setApplicationId(100L);
+		request.setFormAbbreviation("30DHI");
+
+		when(homeInstructionRepo.getApplicationInfoData(100L, null)).thenReturn(new ArrayList<>());
+
+		assertThrows(HomeInstructionException.class, () -> fileUploadService.get30DHIPDFDetails(request, response));
+	}
+
+	@Test
+	void getForm760DHIPDFDetails_shouldThrowException_whenApplicationDataEmpty() throws Exception {
+
+		Map<String, String> config = new HashMap<>();
+		config.put("FILETMPL", "/tmp");
+		config.put("TEMPL_PATH", "/tmp");
+		config.put("HI_APPLN_TRACKING_HTML", "tracking.html");
+
+		when(utility.getConfigList(anyString())).thenReturn(config);
+
+		DHIRequest request = new DHIRequest();
+		request.setApplicationId(100L);
+		request.setFormAbbreviation("60DHI");
+
+		when(homeInstructionRepo.getApplicationInfoData(100L, null)).thenReturn(new ArrayList<>());
+
+		assertThrows(HomeInstructionException.class,
+				() -> fileUploadService.getForm760DHIPDFDetails(request, response));
+	}
+
+	@Test
+	void getTemplatePDFDetails_shouldHandleAPHIM() {
+
+		Map<String, String> config = new HashMap<>();
+		config.put("FILETMPL", "/tmp");
+		config.put("TEMPL_PATH", "/tmp");
+		config.put("HI_APPLN_HTML_APHIA", "HI_APPLN_APHIA.html");
+		config.put("HI_APPLN_TRACKING_HTML", "tracking.html");
+
+		when(utility.getConfigList(anyString())).thenReturn(config);
+
+		when(utility.downloadPdfForm(any(), any(StringBuilder.class), anyString(), anyString(), any()))
+				.thenReturn(false);
+
+		assertThrows(HomeInstructionException.class, () -> fileUploadService.getTemplatePDFDetails("APHIM", response));
+	}
+
+	@Test
+	void getTemplatePDFDetails_shouldHandleRHIDT() {
+
+		Map<String, String> config = new HashMap<>();
+		config.put("FILETMPL", "/tmp");
+		config.put("TEMPL_PATH", "/tmp");
+		config.put("HI_APPLN_HTML_APHIA", "APHIA.html");
+		config.put("HI_APPLN_TRACKING_HTML", "tracking.html");
+
+		when(utility.getConfigList(anyString())).thenReturn(config);
+
+		when(utility.downloadPdfForm(any(), any(StringBuilder.class), anyString(), anyString(), any()))
+				.thenReturn(false);
+
+		assertThrows(HomeInstructionException.class, () -> fileUploadService.getTemplatePDFDetails("RHIDT", response));
+	}
+
+	@Test
+	void getTemplatePDFDetails_shouldHandleRHILT() {
+
+		Map<String, String> config = new HashMap<>();
+		config.put("FILETMPL", "/tmp");
+		config.put("TEMPL_PATH", "/tmp");
+		config.put("HI_APPLN_HTML_APHIA", "APHIA.html");
+		config.put("HI_APPLN_TRACKING_HTML", "tracking.html");
+
+		when(utility.getConfigList(anyString())).thenReturn(config);
+
+		when(utility.downloadPdfForm(any(), any(StringBuilder.class), anyString(), anyString(), any()))
+				.thenReturn(false);
+
+		assertThrows(HomeInstructionException.class, () -> fileUploadService.getTemplatePDFDetails("RHILT", response));
+	}
+
+	@Test
+	void getTemplatePDFDetails_shouldHandlePRTHI() {
+
+		Map<String, String> config = new HashMap<>();
+		config.put("FILETMPL", "/tmp");
+		config.put("TEMPL_PATH", "/tmp");
+		config.put("HI_APPLN_HTML_APHIA", "APHIA.html");
+		config.put("HI_APPLN_TRACKING_HTML", "tracking.html");
+
+		when(utility.getConfigList(anyString())).thenReturn(config);
+
+		when(utility.downloadPdfForm(any(), any(StringBuilder.class), anyString(), anyString(), any()))
+				.thenReturn(false);
+
+		assertThrows(HomeInstructionException.class, () -> fileUploadService.getTemplatePDFDetails("PRTHI", response));
+	}
+
+	@Test
+	void getTemplatePDFDetails_shouldHandleUnknownForm() {
+
+		Map<String, String> config = new HashMap<>();
+		config.put("FILETMPL", "/tmp");
+		config.put("TEMPL_PATH", "/tmp");
+		config.put("HI_APPLN_HTML_APHIA", "APHIA.html");
+		config.put("HI_APPLN_TRACKING_HTML", "tracking.html");
+
+		when(utility.getConfigList(anyString())).thenReturn(config);
+
+		when(utility.downloadPdfForm(any(), any(StringBuilder.class), anyString(), anyString(), any()))
+				.thenReturn(false);
+
+		assertThrows(HomeInstructionException.class,
+				() -> fileUploadService.getTemplatePDFDetails("UNKNOWN", response));
+	}
+
+	@Test
+	void getAttachmentList_whenAttachmentsExist_shouldReturnSuccess() throws Exception {
+
+		HIFormTransactionResp transaction = new HIFormTransactionResp();
+
+		when(homeInstructionRepo.getHIFormTransactionData(1L, 2L, 3L, "P"))
+				.thenReturn(Collections.singletonList(transaction));
+
+		GetAttachmentListResp response = service.getAttachmentList(1L, 2L, 3L, "P");
+
+		assertNotNull(response);
+		assertTrue(response.isSuccess());
+		assertNotNull(response.getAttachmentList());
+
+		verify(homeInstructionRepo).getHIFormTransactionData(1L, 2L, 3L, "P");
+	}
+
+	@Test
+	void getAttachmentList_whenNoAttachments_shouldReturnEmptyList() throws Exception {
+
+	    when(homeInstructionRepo.getHIFormTransactionData(
+	            1L, 2L, 3L, "P"))
+	        .thenReturn(Collections.emptyList());
+
+	    GetAttachmentListResp response =
+	        service.getAttachmentList(1L, 2L, 3L, "P");
+
+	    assertNotNull(response);
+	    assertTrue(response.isSuccess());
+	    assertNotNull(response.getAttachmentList());
+	    assertTrue(response.getAttachmentList().isEmpty());
+	}
+
+	@Test
+	void getAttachmentList_whenRepositoryThrows_shouldThrowException() throws Exception {
+
+	    when(homeInstructionRepo.getHIFormTransactionData(
+	            anyLong(), anyLong(), anyLong(), anyString()))
+	        .thenThrow(new RuntimeException("DB error"));
+
+	    assertThrows(
+	        HomeInstructionException.class,
+	        () -> service.getAttachmentList(1L, 2L, 3L, "P")
+	    );
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "APHIM", "APHIA", "RHIDT", "RHILT", "PRTHI", "LAHIT", "30DHI", "60DHI", "HISCP", "EAPP",
+			"HSAPP" })
+	void getTemplatePDFDetails_shouldSupportAllForms(String abbreviation) {
+
+		Map<String, String> config = new HashMap<>();
+		config.put("FILETMPL", System.getProperty("java.io.tmpdir"));
+		config.put("TEMPL_PATH", System.getProperty("java.io.tmpdir"));
+		config.put("HI_APPLN_TRACKING_HTML", "HI_APPLN_TRACKING.html");
+		config.put("HI_APPLN_HTML_APHIA", "HI_APPLN_APHIA.html");
+
+		when(utility.getConfigList(anyString())).thenReturn(config);
+
+		when(utility.downloadPdfForm(any(), any(StringBuilder.class), eq(abbreviation), anyString(), any()))
+				.thenReturn(false);
+
+		assertThrows(HomeInstructionException.class,
+				() -> service.getTemplatePDFDetails(abbreviation, mock(HttpServletResponse.class)));
+	}
+
+	@Test
+	void getAttachmentList_shouldReturnAttachments() throws Exception {
+
+		HIFormTransactionResp transaction = new HIFormTransactionResp();
+
+		when(homeInstructionRepo.getHIFormTransactionData(1L, 2L, 3L, "P"))
+				.thenReturn(Collections.singletonList(transaction));
+
+		GetAttachmentListResp response = fileUploadService.getAttachmentList(1L, 2L, 3L, "P");
+
+		assertNotNull(response);
+		assertTrue(response.isSuccess());
+		assertNotNull(response.getAttachmentList());
+		assertFalse(response.getAttachmentList().isEmpty());
+	}
+
+	@Test
+	void getAttachmentList_shouldReturnEmptyListWhenNoAttachments() throws Exception {
+
+	    when(homeInstructionRepo.getHIFormTransactionData(
+	            1L, 2L, 3L, "P"))
+	        .thenReturn(Collections.emptyList());
+
+	    GetAttachmentListResp response = fileUploadService.getAttachmentList(1L, 2L, 3L, "P");
+
+	    assertNotNull(response);
+	    assertTrue(response.isSuccess());
+	    assertNotNull(response.getAttachmentList());
+	    assertTrue(response.getAttachmentList().isEmpty());
+	}
+
+	@Test
+	void getAttachmentList_shouldThrowExceptionWhenRepositoryFails() throws Exception {
+
+	    when(homeInstructionRepo.getHIFormTransactionData(
+	            anyLong(), anyLong(), anyLong(), anyString()))
+	        .thenThrow(new RuntimeException("DB error"));
+
+	    assertThrows(
+	            HomeInstructionException.class,
+	            () -> fileUploadService.getAttachmentList(1L, 2L, 3L, "P"));
+	}
+
+	@Test
+	void deleteFormDocument_shouldReturnSuccess() throws Exception {
+
+		DeleteDocumentReq request = new DeleteDocumentReq();
+
+		request.setIndicator("D");
+		request.setId((long) 10);
+		request.setApplicationId(100L);
+		request.setActivity("DELETE");
+		request.setStatus("D");
+		request.setComment("test");
+		request.setLoggedInUserId("user1");
+		request.setLoggedInUserPersonType("P");
+
+		DocumentUpdateResp updateResp = new DocumentUpdateResp();
+		updateResp.setId(10L);
+
+		when(fileUploadRepo.updateHITransactionData(any(UploadFormDocumentReq.class)))
+				.thenReturn(Collections.singletonList(updateResp));
+
+		when(homeInstructionRepo.getHIFormTransactionData(anyLong(), anyLong(), anyLong(), anyString()))
+				.thenReturn(new ArrayList<>());
+
+		DeleteDocResponse response = fileUploadService.deleteFormDocument(request);
+
+		assertNotNull(response);
+		assertTrue(response.isSuccess());
+	}
+
+	@Test
+	void deleteFormDocument_shouldReturnFailureWhenUpdateFails() {
+
+		DeleteDocumentReq request = new DeleteDocumentReq();
+
+		request.setIndicator("D");
+		request.setId((long) 10);
+		request.setApplicationId(100L);
+		request.setLoggedInUserPersonType("P");
+
+		try {
+			when(fileUploadRepo.updateHITransactionData(any(UploadFormDocumentReq.class)))
+					.thenReturn(Collections.emptyList());
+		} catch (Exception e) {
+
+			e.printStackTrace();
+		}
+
+		try {
+			when(homeInstructionRepo.getHIFormTransactionData(anyLong(), anyLong(), anyLong(), anyString()))
+					.thenReturn(new ArrayList<>());
+		} catch (Exception e) {
+
+			e.printStackTrace();
+		}
+
+		DeleteDocResponse response = fileUploadService.deleteFormDocument(request);
+
+		assertNotNull(response);
+		assertFalse(response.isSuccess());
+	}
+
+	@Test
+	void deleteFormDocument_shouldThrowExceptionWhenRepositoryFails() {
+
+		DeleteDocumentReq request = new DeleteDocumentReq();
+
+		request.setIndicator("D");
+		request.setId((long) 10);
+		request.setApplicationId(100L);
+		request.setLoggedInUserPersonType("P");
+
+		try {
+			when(fileUploadRepo.updateHITransactionData(any(UploadFormDocumentReq.class)))
+					.thenThrow(new RuntimeException("DB error"));
+		} catch (Exception e) {
+
+			e.printStackTrace();
+		}
+
+		assertThrows(HomeInstructionException.class, () -> fileUploadService.deleteFormDocument(request));
+	}
+
+	@Test
+	void uploadAndParseFile_shouldFailForEmptyFile() {
+
+		MultipartFile file = new MockMultipartFile("file", "test.pdf", "application/pdf", new byte[0]);
+
+		UploadFormDocumentReq request = new UploadFormDocumentReq();
+
+		FileUploadResp response = fileUploadService.uploadAndParseFile(file, request);
+
+		assertNotNull(response);
+		assertFalse(response.isSuccess());
+	}
+
+	@Test
+	void uploadAndParseFile_shouldFailForNullFile() {
+
+		UploadFormDocumentReq request = new UploadFormDocumentReq();
+
+		FileUploadResp response = fileUploadService.uploadAndParseFile(null, request);
+
+		assertNotNull(response);
+		assertFalse(response.isSuccess());
+	}
+
+	@Test
+	void uploadAndParseFile_shouldRejectInvalidExtension() {
+
+		Map<String, String> config = new HashMap<>();
+		config.put("FILEEXTN", "pdf,jpg");
+		config.put("FILEMSZ", "10MB");
+		config.put("FILEUPLOAD", "S");
+		config.put("FORM_SUB_FOLDER", "forms");
+
+		when(utility.getConfigList(anyString())).thenReturn(config);
+
+		MultipartFile file = new MockMultipartFile("file", "test.exe", "application/octet-stream",
+				"test".getBytes(StandardCharsets.UTF_8));
+
+		UploadFormDocumentReq request = new UploadFormDocumentReq();
+
+		FileUploadResp response = fileUploadService.uploadAndParseFile(file, request);
+
+		assertNotNull(response);
+		assertFalse(response.isSuccess());
+	}
+
+	@Test
+	void uploadAndParseFile_shouldRejectLargeFile() {
+
+		Map<String, String> config = new HashMap<>();
+		config.put("FILEEXTN", "pdf");
+		config.put("FILEMSZ", "1B");
+		config.put("FILEUPLOAD", "S");
+		config.put("FORM_SUB_FOLDER", "forms");
+
+		when(utility.getConfigList(anyString())).thenReturn(config);
+
+		MultipartFile file = new MockMultipartFile("file", "test.pdf", "application/pdf",
+				"This is bigger than one byte".getBytes(StandardCharsets.UTF_8));
+
+		UploadFormDocumentReq request = new UploadFormDocumentReq();
+
+		FileUploadResp response = fileUploadService.uploadAndParseFile(file, request);
+
+		assertNotNull(response);
+		assertFalse(response.isSuccess());
+	}
+
+	@Test
+	void uploadAndParseFile_shouldUploadToS3() throws Exception {
+
+		Map<String, String> config = new HashMap<>();
+		config.put("FILEEXTN", "pdf");
+		config.put("FILEMSZ", "10MB");
+		config.put("FILEUPLOAD", "S");
+		config.put("FORM_SUB_FOLDER", "forms");
+		config.put("S3BUCKETFOLDER", "bucket-folder");
+		config.put("S3ACCESSKEY", "access");
+		config.put("S3SECRETKEY", "secret");
+		config.put("S3LIBBKTNAME", "bucket");
+		config.put("S3BUCKETREGION", "region");
+		config.put("FILETMPL", System.getProperty("java.io.tmpdir"));
+
+		when(utility.getConfigList(anyString())).thenReturn(config);
+
+		when(applicationListRepo.updateHIApplication(any(UpdateHIApplicationReq.class)))
+				.thenReturn(Collections.singletonList(100L));
+
+		when(utility.getDocEncPass("100")).thenReturn("password");
+
+		S3UploadResponse s3Response = new S3UploadResponse();
+
+		s3Response.setSuccess(true);
+
+		when(utility.uploadBase64FileToS3(any(MultipartFile.class), anyString(), anyString(), anyString(), anyString(),
+				anyString(), anyString(), anyBoolean(), anyString(), anyString(), anyString())).thenReturn(s3Response);
+
+		when(fileUploadRepo.updateHITransactionData(any(UploadFormDocumentReq.class)))
+				.thenReturn(Collections.emptyList());
+
+		when(homeInstructionRepo.getHIFormTransactionData(anyLong(), anyLong(), anyLong(), anyString()))
+				.thenReturn(new ArrayList<>());
+
+		MultipartFile file = new MockMultipartFile("file", "test.pdf", "application/pdf",
+				"test".getBytes(StandardCharsets.UTF_8));
+
+		UploadFormDocumentReq request = new UploadFormDocumentReq();
+		request.setApplicationId(0L);
+
+		FileUploadResp response = fileUploadService.uploadAndParseFile(file, request);
+
+		assertNotNull(response);
+		assertTrue(response.isSuccess());
+
+		verify(applicationListRepo).updateHIApplication(any(UpdateHIApplicationReq.class));
+
+		verify(utility).uploadBase64FileToS3(any(MultipartFile.class), anyString(), anyString(), anyString(),
+				anyString(), anyString(), null, anyBoolean(), anyString(), anyString(), anyString());
+	}
+
+	@Test
+	void uploadAndParseFile_shouldReturnFailure_whenFileIsNull() {
+		UploadFormDocumentReq req = new UploadFormDocumentReq();
+
+		FileUploadResp result = service.uploadAndParseFile(null, req);
+
+		assertFalse(result.isSuccess());
+		assertEquals(Constant.getMessageMap().get(Constant.FUA_FSE), result.getMessage());
+	}
+
+	@Test
+	void uploadAndParseFile_shouldReturnFailure_whenFileIsEmpty() {
+		MultipartFile file = mock(MultipartFile.class);
+		when(file.isEmpty()).thenReturn(true);
+
+		UploadFormDocumentReq req = new UploadFormDocumentReq();
+
+		FileUploadResp result = service.uploadAndParseFile(file, req);
+
+		assertFalse(result.isSuccess());
+		assertEquals(Constant.getMessageMap().get(Constant.FUA_FSE), result.getMessage());
+	}
+
+	@Test
+	void uploadAndParseFile_shouldRejectUnsupportedExtension() {
+		MultipartFile file = mock(MultipartFile.class);
+
+		when(file.isEmpty()).thenReturn(false);
+		when(file.getOriginalFilename()).thenReturn("document.pdf");
+
+		Map<String, String> config = new HashMap<>();
+		config.put("FILEEXTN", "jpg,png");
+		config.put("FILEMSZ", "10MB");
+		config.put("FILEUPLOAD", "S");
+		config.put("FORM_SUB_FOLDER", "");
+
+		when(utility.getConfigList(anyString())).thenReturn(config);
+
+		UploadFormDocumentReq req = new UploadFormDocumentReq();
+
+		FileUploadResp result = service.uploadAndParseFile(file, req);
+
+		assertFalse(result.isSuccess());
+	}
+
+	@Test
+	void uploadAndParseFile_shouldRejectFileWhenSizeExceedsLimit() {
+		MultipartFile file = mock(MultipartFile.class);
+
+		when(file.isEmpty()).thenReturn(false);
+		when(file.getOriginalFilename()).thenReturn("document.pdf");
+		when(file.getSize()).thenReturn(20L * 1024 * 1024);
+
+		Map<String, String> config = new HashMap<>();
+		config.put("FILEEXTN", "pdf");
+		config.put("FILEMSZ", "10MB");
+		config.put("FILEUPLOAD", "S");
+		config.put("FORM_SUB_FOLDER", "");
+
+		when(utility.getConfigList(anyString())).thenReturn(config);
+
+		UploadFormDocumentReq req = new UploadFormDocumentReq();
+
+		FileUploadResp result = service.uploadAndParseFile(file, req);
+
+		assertFalse(result.isSuccess());
+	}
+
+	@Test
+	void uploadAndParseFile_shouldUploadToS3Successfully() throws Exception {
+		MultipartFile file = mock(MultipartFile.class);
+
+		when(file.isEmpty()).thenReturn(false);
+		when(file.getOriginalFilename()).thenReturn("test.pdf");
+		when(file.getSize()).thenReturn(100L);
+
+		Map<String, String> config = new HashMap<>();
+		config.put("FILEEXTN", "pdf");
+		config.put("FILEMSZ", "10MB");
+		config.put("FILEUPLOAD", "S");
+		config.put("FORM_SUB_FOLDER", "forms");
+		config.put("S3BUCKETFOLDER", "bucket");
+		config.put("S3ACCESSKEY", "access");
+		config.put("S3SECRETKEY", "secret");
+		config.put("S3LIBBKTNAME", "bucket-name");
+		config.put("S3BUCKETREGION", "region");
+		config.put("FILETMPL", System.getProperty("java.io.tmpdir"));
+
+		when(utility.getConfigList(anyString())).thenReturn(config);
+		when(utility.getDocEncPass(anyString())).thenReturn("password");
+
+		when(applicationListRepo.updateHIApplication(any(UpdateHIApplicationReq.class)))
+				.thenReturn(Collections.singletonList(123L));
+
+		S3UploadResponse s3Response = mock(S3UploadResponse.class);
+		when(s3Response.isSuccess()).thenReturn(true);
+		when(s3Response.getGuid()).thenReturn("uploaded-guid");
+
+		when(utility.uploadBase64FileToS3(eq(file), eq("access"), eq("secret"), eq("bucket-name"), anyString(),
+				eq("region"), anyString(), eq(false), eq("password"), anyString(), anyString())).thenReturn(s3Response);
+
+		DocumentUpdateResp updateResp = mock(DocumentUpdateResp.class);
+		when(updateResp.getId()).thenReturn(999L);
+		when(updateResp.getApplicationNo()).thenReturn("APP001");
+		when(updateResp.getApplicationStatus()).thenReturn("SUBMITTED");
+		when(updateResp.getApplicationStatusAbbrev()).thenReturn("SUB");
+		when(updateResp.getUpdatedOn()).thenReturn("2026-01-01");
+
+		when(fileUploadRepo.updateHITransactionData(any(UploadFormDocumentReq.class)))
+				.thenReturn(Collections.singletonList(updateResp));
+
+		when(homeInstructionRepo.getHIFormTransactionData(anyLong(), anyLong(), anyLong(), anyString()))
+				.thenReturn(new ArrayList<>());
+
+		UploadFormDocumentReq req = new UploadFormDocumentReq();
+		req.setApplicationId(123L);
+		req.setSchoolYear("2026");
+		req.setActivity("AMSBM");
+
+		FileUploadResp result = service.uploadAndParseFile(file, req);
+
+		assertTrue(result.isSuccess());
+		assertEquals(123L, result.getApplicationId());
+
+		verify(utility).uploadBase64FileToS3(eq(file), eq("access"), eq("secret"), eq("bucket-name"),
+				eq("bucket/forms/2026"), eq("region"), anyString(), eq(false), eq("password"), anyString(),
+				anyString());
+
+		verify(fileUploadRepo).updateHITransactionData(any(UploadFormDocumentReq.class));
+	}
+
+	@Test
+	void uploadAndParseFile_s3Failure_amsbm() {
+		uploadS3WithActivity("AMSBM", false);
+	}
+
+	@Test
+	void uploadAndParseFile_s3Failure_filbcn() {
+		uploadS3WithActivity("FILBCN", false);
+	}
+
+	@Test
+	void uploadAndParseFile_s3Failure_apc() {
+		uploadS3WithActivity("APC", false);
+	}
+
+	@Test
+	void uploadAndParseFile_s3Failure_otherActivity() {
+		uploadS3WithActivity("OTHER", false);
+	}
+
+	private void uploadS3WithActivity(String activity, boolean success) {
+		MultipartFile file = mock(MultipartFile.class);
+
+		when(file.isEmpty()).thenReturn(false);
+		when(file.getOriginalFilename()).thenReturn("test.pdf");
+		when(file.getSize()).thenReturn(100L);
+
+		Map<String, String> config = new HashMap<>();
+		config.put("FILEEXTN", "pdf");
+		config.put("FILEMSZ", "10MB");
+		config.put("FILEUPLOAD", "S");
+		config.put("FORM_SUB_FOLDER", "");
+		config.put("S3BUCKETFOLDER", "bucket");
+		config.put("S3ACCESSKEY", "access");
+		config.put("S3SECRETKEY", "secret");
+		config.put("S3LIBBKTNAME", "bucket-name");
+		config.put("S3BUCKETREGION", "region");
+		config.put("FILETMPL", System.getProperty("java.io.tmpdir"));
+
+		when(utility.getConfigList(anyString())).thenReturn(config);
+		try {
+			when(utility.getDocEncPass(anyString())).thenReturn("password");
+		} catch (Exception e) {
+
+			e.printStackTrace();
+		}
+
+		try {
+			when(applicationListRepo.updateHIApplication(any(UpdateHIApplicationReq.class)))
+					.thenReturn(Collections.singletonList(123L));
+		} catch (Exception e) {
+
+			e.printStackTrace();
+		}
+
+		S3UploadResponse s3Response = mock(S3UploadResponse.class);
+		when(s3Response.isSuccess()).thenReturn(success);
+
+		try {
+			when(utility.uploadBase64FileToS3(any(), anyString(), anyString(), anyString(), anyString(), anyString(),
+					anyString(), anyBoolean(), anyString(), anyString(), anyString())).thenReturn(s3Response);
+		} catch (Exception e) {
+
+			e.printStackTrace();
+		}
+
+		try {
+			when(homeInstructionRepo.getHIFormTransactionData(anyLong(), anyLong(), anyLong(), anyString()))
+					.thenReturn(new ArrayList<>());
+		} catch (Exception e) {
+
+			e.printStackTrace();
+		}
+
+		UploadFormDocumentReq req = new UploadFormDocumentReq();
+		req.setApplicationId(123L);
+		req.setActivity(activity);
+
+		FileUploadResp result = service.uploadAndParseFile(file, req);
+
+		assertEquals(success, result.isSuccess());
+	}
+
+	@Test
+	void uploadAndParseFile_shouldInsertApplication_whenApplicationIdIsNull() throws Exception {
+
+		UploadFormDocumentReq req = new UploadFormDocumentReq();
+		req.setApplicationId(null);
+
+		service.uploadAndParseFile(file, req);
+
+		ArgumentCaptor<UpdateHIApplicationReq> captor = ArgumentCaptor.forClass(UpdateHIApplicationReq.class);
+
+		verify(applicationListRepo).updateHIApplication(captor.capture());
+		
+
+		assertEquals("I", captor.getValue().getIndicator());
+	}
+
+	@Test
+	void uploadAndParseFile_shouldUpdateApplication_whenApplicationIdExists() throws Exception {
+		// same setup
+
+		UploadFormDocumentReq req = new UploadFormDocumentReq();
+		req.setApplicationId(123L);
+
+		service.uploadAndParseFile(file, req);
+
+		ArgumentCaptor<UpdateHIApplicationReq> captor = ArgumentCaptor.forClass(UpdateHIApplicationReq.class);
+
+		verify(applicationListRepo).updateHIApplication(captor.capture());
+
+		assertEquals("U", captor.getValue().getIndicator());
+	}
+
+	@Test
+	void uploadAndParseFile_shouldUploadLocalFileSuccessfully() throws Exception {
+		MultipartFile file = mock(MultipartFile.class);
+
+		when(file.isEmpty()).thenReturn(false);
+		when(file.getOriginalFilename()).thenReturn("test.pdf");
+		when(file.getSize()).thenReturn(100L);
+
+		Map<String, String> config = new HashMap<>();
+		config.put("FPATH", System.getProperty("java.io.tmpdir"));
+		config.put("FILEEXTN", "pdf");
+		config.put("FILEMSZ", "10MB");
+		config.put("FILEUPLOAD", "L");
+		config.put("FORM_SUB_FOLDER", "");
+		config.put("FILETMPL", System.getProperty("java.io.tmpdir"));
+
+		when(utility.getConfigList(anyString())).thenReturn(config);
+		when(utility.getDocEncPass(anyString())).thenReturn("password");
+
+		when(applicationListRepo.updateHIApplication(any(UpdateHIApplicationReq.class)))
+				.thenReturn(Collections.singletonList(123L));
+
+		File encryptedFile = File.createTempFile("encrypted", ".tmp");
+
+		when(utility.getProtectedZipFile(any(MultipartFile.class), anyString(), anyString(), anyString()))
+				.thenReturn(encryptedFile);
+
+		when(utility.getBase64EncDoc(any(File.class))).thenReturn("base64-data");
+
+		when(fileUploadRepo.updateHITransactionData(any(UploadFormDocumentReq.class))).thenReturn(new ArrayList<>());
+
+		when(homeInstructionRepo.getHIFormTransactionData(anyLong(), anyLong(), anyLong(), anyString()))
+				.thenReturn(new ArrayList<>());
+
+		UploadFormDocumentReq req = new UploadFormDocumentReq();
+		req.setApplicationId(123L);
+		req.setActivity("FILBCN");
+
+		FileUploadResp result = service.uploadAndParseFile(file, req);
+
+		assertTrue(result.isSuccess());
+
+		verify(utility).createDirIfNotExists(any(File.class));
+		verify(utility).permitFileAndFolder(any(File.class));
+		verify(utility).getBase64EncDoc(encryptedFile);
+	}
+
+	@Test
+	void deleteDocumentData_shouldReturnSuccess_whenDbDeleteSucceeds() throws Exception {
+		Map<String, String> config = new HashMap<>();
+		config.put("FPATH", System.getProperty("java.io.tmpdir"));
+		config.put("S3BUCKETFOLDER", "bucket");
+
+		when(utility.getConfigList(anyString())).thenReturn(config);
+
+		DocumentUpdateResp update = mock(DocumentUpdateResp.class);
+		when(update.getId()).thenReturn(10L);
+		when(fileUploadRepo.updateHITransactionData(any(UploadFormDocumentReq.class)))
+				.thenReturn(Collections.singletonList(update));
+
+		DeleteDocResponse result = service.deleteDocumentData(10, "abc.txt", "L", "", "test.pdf", "", true);
+
+		assertTrue(result.isSuccess());
+		assertEquals(Constant.getMessageMap().get(Constant.FUA_FDS), result.getMessage());
+	}
+
+	@Test
+	void deleteDocumentData_shouldReturnFailure_whenDbDeleteFails() throws Exception {
+		Map<String, String> config = new HashMap<>();
+		config.put("FPATH", System.getProperty("java.io.tmpdir"));
+		config.put("S3BUCKETFOLDER", "bucket");
+
+		when(utility.getConfigList(anyString())).thenReturn(config);
+
+		DocumentUpdateResp update = mock(DocumentUpdateResp.class);
+		when(update.getId()).thenReturn(0L);
+
+		when(fileUploadRepo.updateHITransactionData(any(UploadFormDocumentReq.class)))
+				.thenReturn(Collections.singletonList(update));
+
+		DeleteDocResponse result = service.deleteDocumentData(10, "abc.txt", "L", "", "test.pdf", "", true);
+
+		assertFalse(result.isSuccess());
+		assertEquals(Constant.getMessageMap().get(Constant.FUA_FDN), result.getMessage());
+	}
+
+	@Test
+	void deleteDocumentData_shouldDeleteFromS3() throws Exception {
+		Map<String, String> config = new HashMap<>();
+		config.put("S3BUCKETFOLDER", "bucket");
+
+		when(utility.getConfigList(anyString())).thenReturn(config);
+
+		DeleteDocResponse result = service.deleteDocumentData(10, "abc.txt", "S", "", "test.pdf", "", false);
+
+		verify(utility).deleteS3File(anyString(), anyString(), anyString(), anyString(), anyString(), anyString());
+
+		assertFalse(result.isSuccess());
+	}
+
+	@Test
+	void deleteDocumentData_shouldThrowHomeInstructionException() {
+	    when(utility.getConfigList(anyString()))
+	            .thenThrow(new RuntimeException("config error"));
+
+	    assertThrows(
+	            HomeInstructionException.class,
+	            () -> service.deleteDocumentData(
+	                    1,
+	                    "abc.txt",
+	                    "L",
+	                    "",
+	                    "test.pdf",
+	                    "",
+	                    true));
+	}
+
+	@Test
+	void getAttachmentList_shouldReturnFiles_whenAttachmentsExist() throws Exception {
+		HIFormTransactionResp attachment = new HIFormTransactionResp();
+
+		when(homeInstructionRepo.getHIFormTransactionData(1L, 2L, 3L, "STUDENT"))
+				.thenReturn(Collections.singletonList(attachment));
+
+		when(utility.responseDate(any(LocalDateTime.class))).thenReturn("2026-01-01");
+
+		GetAttachmentListResp result = service.getAttachmentList(1L, 2L, 3L, "STUDENT");
+
+		assertTrue(result.isSuccess());
+		assertNotNull(result.getAttachmentList());
+	}
+
+	@Test
+	void getAttachmentList_shouldReturnNotFound_whenNoAttachments() throws Exception {
+		
+			when(homeInstructionRepo.getHIFormTransactionData(anyLong(), anyLong(), anyLong(), anyString()))
+					.thenReturn(new ArrayList<>());
+		
+
+		when(utility.responseDate(any(LocalDateTime.class))).thenReturn("2026-01-01");
+
+		GetAttachmentListResp result = service.getAttachmentList(1L, 2L, 3L, "STUDENT");
+
+		assertTrue(result.isSuccess());
+		assertNotNull(result.getAttachmentList());
+		assertTrue(result.getAttachmentList().isEmpty());
+	}
+
+	@Test
+	void getAttachmentList_shouldThrowException_whenRepoFails() throws Exception {
+		
+		when(homeInstructionRepo.getHIFormTransactionData(anyLong(), anyLong(), anyLong(), anyString()))
+					.thenThrow(new RuntimeException("DB error"));
+		
+
+		assertThrows(HomeInstructionException.class, () -> service.getAttachmentList(1L, 2L, 3L, "STUDENT"));
+	}
+
+	@Test
+	void deleteFormDocument_shouldReturnFailure_whenUpdateFails() throws Exception {
+		DeleteDocumentReq req = new DeleteDocumentReq();
+
+		req.setId((long) 10);
+		req.setApplicationId(100L);
+		req.setLoggedInUserPersonType("STAFF");
+
+		when(fileUploadRepo.updateHITransactionData(any(UploadFormDocumentReq.class)))
+					.thenReturn(new ArrayList<>());
+		
+
+		when(homeInstructionRepo.getHIFormTransactionData(anyLong(), anyLong(), anyLong(), anyString()))
+					.thenReturn(new ArrayList<>());
+		
+
+		when(utility.responseDate(any(LocalDateTime.class))).thenReturn("2026-01-01");
+
+		DeleteDocResponse result = service.deleteFormDocument(req);
+
+		assertFalse(result.isSuccess());
+		assertEquals(Constant.getMessageMap().get(Constant.FDE_FDN), result.getMessage());
+	}
+
+	@Test
+	void deleteFormDocument_shouldThrowException_whenRepoFails() throws Exception {
+		DeleteDocumentReq req = new DeleteDocumentReq();
+		req.setApplicationId(100L);
+
+		when(fileUploadRepo.updateHITransactionData(any(UploadFormDocumentReq.class)))
+					.thenThrow(new RuntimeException("DB error"));
+		
+
+		assertThrows(HomeInstructionException.class, () -> service.deleteFormDocument(req));
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "APHIM", "APHIA", "RHIDT", "RHILT", "PRTHI", "LAHIT", "30DHI", "60DHI", "HISCP", "EAPP",
+			"HSAPP" })
+	void getTemplatePDFDetails_shouldCoverAllSwitchCases(String abbreviation) throws Exception {
+
+		Map<String, String> config = new HashMap<>();
+		config.put("FILETMPL", System.getProperty("java.io.tmpdir"));
+		config.put("TEMPL_PATH", System.getProperty("java.io.tmpdir"));
+		config.put("HI_APPLN_TRACKING_HTML", "tracking.html");
+		config.put("HI_APPLN_HTML_APHIA", "aphia.html");
+
+		when(utility.getConfigList(anyString())).thenReturn(config);
+
+		when(utility.downloadPdfForm(any(), any(StringBuilder.class), eq(abbreviation), anyString(), any()))
+				.thenReturn(true);
+
+		doNothing().when(utility).generatePDF(anyString(), anyString());
+
+		HttpServletResponse response = mock(HttpServletResponse.class);
+
+		service.getTemplatePDFDetails(abbreviation, response);
+
+		verify(utility).downloadPdfForm(any(), any(StringBuilder.class), eq(abbreviation), anyString(), any());
+	}
+
+	@Test
+	void getTemplatePDFDetails_shouldCoverDefaultSwitchBranch() {
+		String abbreviation = "UNKNOWN";
+
+		Map<String, String> config = new HashMap<>();
+		config.put("FILETMPL", System.getProperty("java.io.tmpdir"));
+		config.put("TEMPL_PATH", System.getProperty("java.io.tmpdir"));
+		config.put("HI_APPLN_TRACKING_HTML", "tracking.html");
+		config.put("HI_APPLN_HTML_APHIA", "aphia.html");
+
+		when(utility.getConfigList(anyString())).thenReturn(config);
+
+		when(utility.downloadPdfForm(isNull(), any(StringBuilder.class), eq(abbreviation), anyString(), isNull()))
+				.thenReturn(true);
+
+		HttpServletResponse response = mock(HttpServletResponse.class);
+
+		service.getTemplatePDFDetails(abbreviation, response);
+
+		verify(utility).downloadPdfForm(isNull(), any(StringBuilder.class), eq(abbreviation), anyString(), isNull());
+	}
+
+	@Test
+	void getTemplatePDFDetails_shouldThrowException_whenPdfGenerationReturnsFalse() {
+		Map<String, String> config = new HashMap<>();
+		config.put("FILETMPL", System.getProperty("java.io.tmpdir"));
+		config.put("TEMPL_PATH", System.getProperty("java.io.tmpdir"));
+		config.put("HI_APPLN_TRACKING_HTML", "tracking.html");
+		config.put("HI_APPLN_HTML_APHIA", "aphia.html");
+
+		when(utility.getConfigList(anyString())).thenReturn(config);
+
+		when(utility.downloadPdfForm(any(), any(StringBuilder.class), anyString(), anyString(), any()))
+				.thenReturn(false);
+
+		HttpServletResponse response = mock(HttpServletResponse.class);
+
+		assertThrows(HomeInstructionException.class, () -> service.getTemplatePDFDetails("APHIA", response));
+	}
+
+	@Test
+	void getFormPdfDetails_shouldThrowException_whenDataListEmpty() {
+		Map<String, String> config = new HashMap<>();
+		config.put("TEMPL_PATH", System.getProperty("java.io.tmpdir"));
+		config.put("HI_APPLN_HTML_APHIA", "aphia.html");
+		config.put("FILETMPL", System.getProperty("java.io.tmpdir"));
+
+		when(utility.getConfigList(anyString())).thenReturn(config);
+
+		when(homeInstructionRepo.getForm1AphirData(anyLong(), anyLong(), anyString())).thenReturn(new ArrayList<>());
+
+		HttpServletResponse response = mock(HttpServletResponse.class);
+
+		assertThrows(HomeInstructionException.class,
+				() -> service.getFormPdfDetails(1L, 2L, "STAFF", "APHIA", response));
+	}
+
+	@Test
+	void getFormPdfDetails_shouldThrowException_whenDownloadPdfFails() {
+		Map<String, String> config = new HashMap<>();
+		config.put("TEMPL_PATH", System.getProperty("java.io.tmpdir"));
+		config.put("HI_APPLN_HTML_APHIA", "aphia.html");
+		config.put("FILETMPL", System.getProperty("java.io.tmpdir"));
+
+		when(utility.getConfigList(anyString())).thenReturn(config);
+
+		Form1AphirDataResp data = new Form1AphirDataResp();
+
+		when(homeInstructionRepo.getForm1AphirData(anyLong(), anyLong(), anyString()))
+				.thenReturn(Collections.singletonList(data));
+
+		when(homeInstructionRepo.getForm1AphirScheduleData(anyLong())).thenReturn(new ArrayList<>());
+
+		when(utility.downloadPdfForm(any(Form1AphirDataResp.class), any(StringBuilder.class), anyString(), anyString(),
+				any())).thenReturn(false);
+
+		HttpServletResponse response = mock(HttpServletResponse.class);
+
+		assertThrows(HomeInstructionException.class,
+				() -> service.getFormPdfDetails(1L, 2L, "STAFF", "APHIA", response));
+	}
+
+	@Test
+	void getApplicationTrackingPdfDetails_shouldThrowException_whenDownloadFails() {
+		Map<String, String> config = new HashMap<>();
+		config.put("TEMPL_PATH", System.getProperty("java.io.tmpdir"));
+		config.put("FILETMPL", System.getProperty("java.io.tmpdir"));
+		config.put("HI_APPLN_TRACKING_HTML", "tracking.html");
+
+		when(utility.getConfigList(anyString())).thenReturn(config);
+
+		ApplicationTrackingDataList data = new ApplicationTrackingDataList();
+
+		ApplicationTrackingRequest request = mock(ApplicationTrackingRequest.class);
+
+		when(request.getApplicationTrackingDataList()).thenReturn(Collections.singletonList(data));
+
+		when(utility.downloadPdfForm(anyList(), any(StringBuilder.class), eq("LAHIT"), anyString(), isNull()))
+				.thenReturn(false);
+
+		HttpServletResponse response = mock(HttpServletResponse.class);
+
+		assertThrows(HomeInstructionException.class, () -> service.getApplicationTrackingPdfDetails(request, response));
+	}
+
+	@Test
+	void get30DHIPDFDetails_shouldThrowException_whenPdfGenerationFails() throws Exception {
+		Map<String, String> config = new HashMap<>();
+		config.put("TEMPL_PATH", System.getProperty("java.io.tmpdir"));
+		config.put("FILETMPL", System.getProperty("java.io.tmpdir"));
+
+		when(utility.getConfigList(anyString())).thenReturn(config);
+
+		DHIRequest request = mock(DHIRequest.class);
+
+		when(request.getFormAbbreviation()).thenReturn("30DHI");
+		when(request.getApplicationId()).thenReturn(1L);
+		when(request.getLoggedInUserPersonType()).thenReturn("STAFF");
+
+		ApplicationInfoResp app = new ApplicationInfoResp();
+		app.setStudentId(1L);
+		app.setStudentName("Test Student");
+		app.setStudentGrade("5");
+
+		GetPhysicianInfoResp physician = new GetPhysicianInfoResp();
+		physician.setPhysicianName("Dr Test");
+
+		when(homeInstructionRepo.getApplicationInfoData(anyLong(), anyString()))
+					.thenReturn(Collections.singletonList(app));
+
+
+		when(homeInstructionRepo.getPhysicianInfoData(anyLong())).thenReturn(Collections.singletonList(physician));
+		
+
+		when(utility.downloadPdfForm(any(Form630DhiDataResp.class), any(StringBuilder.class), eq("30DHI"), anyString(),
+				isNull())).thenReturn(false);
+
+		HttpServletResponse response = mock(HttpServletResponse.class);
+
+		assertThrows(HomeInstructionException.class, () -> service.get30DHIPDFDetails(request, response));
+	}
+
+	@Test
+	void getForm760DHIPDFDetails_shouldThrowException_whenPdfGenerationFails() throws Exception {
+		Map<String, String> config = new HashMap<>();
+		config.put("TEMPL_PATH", System.getProperty("java.io.tmpdir"));
+		config.put("FILETMPL", System.getProperty("java.io.tmpdir"));
+
+		when(utility.getConfigList(anyString())).thenReturn(config);
+
+		DHIRequest request = mock(DHIRequest.class);
+
+		when(request.getFormAbbreviation()).thenReturn("60DHI");
+		when(request.getApplicationId()).thenReturn(1L);
+		when(request.getLoggedInUserPersonType()).thenReturn("STAFF");
+
+		ApplicationInfoResp app = new ApplicationInfoResp();
+		app.setStudentId(1L);
+		app.setStudentName("Test Student");
+		app.setStudentGrade("5");
+
+		GetPhysicianInfoResp physician = new GetPhysicianInfoResp();
+		physician.setPhysicianName("Dr Test");
+
+		when(homeInstructionRepo.getApplicationInfoData(anyLong(), anyString()))
+					.thenReturn(Collections.singletonList(app));
+		
+
+		when(homeInstructionRepo.getPhysicianInfoData(anyLong())).thenReturn(Collections.singletonList(physician));
+		
+
+		when(utility.downloadPdfForm(any(Form760DhiDataResp.class), any(StringBuilder.class), eq("60DHI"), anyString(),
+				isNull())).thenReturn(false);
+
+		HttpServletResponse response = mock(HttpServletResponse.class);
+
+		assertThrows(HomeInstructionException.class, () -> service.getForm760DHIPDFDetails(request, response));
+	}
+
+}

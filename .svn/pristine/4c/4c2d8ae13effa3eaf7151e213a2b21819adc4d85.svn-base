@@ -1,0 +1,347 @@
+/*
+ * Copyright (C) YYYY-YYYY XXXXXXXXXXXXX
+ * mailto:AAAA@DDDD.COM
+ *
+ */
+package com.jcboe.home.instruction.repo;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.stereotype.Repository;
+
+import com.jcboe.home.instruction.model.request.GetAppListReq;
+import com.jcboe.home.instruction.model.request.UpdateAssignTeacherReq;
+import com.jcboe.home.instruction.model.request.UpdateHIActivityReq;
+import com.jcboe.home.instruction.model.request.UpdateHIApplicationReq;
+import com.jcboe.home.instruction.response.AppStatusListResp;
+import com.jcboe.home.instruction.response.ApplicationList;
+import com.jcboe.home.instruction.response.ApplicationSummaryResp;
+import com.jcboe.home.instruction.response.GradeListResp;
+import com.jcboe.home.instruction.response.SchoolResp;
+import com.jcboe.home.instruction.response.UpdateHIActivityResp;
+import com.jcboe.home.instruction.utilities.AES;
+import com.jcboe.home.instruction.utilities.Constant;
+
+@Repository
+public class ApplicationListRepo {
+
+	private final Logger logger = LogManager.getLogger(ApplicationListRepo.class);
+
+	private NamedParameterJdbcTemplate jdbcTemplate;
+
+	@Autowired
+	public ApplicationListRepo(final NamedParameterJdbcTemplate jdbcTemplate) {
+		this.jdbcTemplate = jdbcTemplate;
+
+	}
+
+	public List<ApplicationList> getApplicationDetails(GetAppListReq getAppListReq) throws Exception {
+		logger.debug("Calling db function fn_get_hi_application_list with parameter(s): -{}", getAppListReq);
+
+		final String query = "SELECT * FROM fn_get_hi_application_list(:p_school_year,:p_status,:p_student,:p_school_code,:p_grade_id,:p_application_no,:p_application_date,:p_all_application,:p_pagesize,:p_pagenumber,:p_logged_in_user,:p_logged_in_user_person_type)";
+
+		Map<String, Object> params = new HashMap<>();
+		params.put("p_school_year", getAppListReq.getSchoolYear());
+		params.put("p_status", getAppListReq.getStatus());
+		params.put("p_student", getAppListReq.getstudent());
+		params.put("p_school_code", getAppListReq.getSchoolCode());
+		params.put("p_grade_id", getAppListReq.getGradeId());
+		params.put("p_application_no", getAppListReq.getApplicationNo());
+		params.put("p_application_date", getAppListReq.getApplicationDate());
+		params.put("p_all_application", getAppListReq.getAllApplication());
+		params.put("p_pagesize", getAppListReq.getPagesize());
+		params.put("p_pagenumber", getAppListReq.getPagenumber());
+
+		if (StringUtils.isNotEmpty(getAppListReq.getLoggedInUserId())) {
+			params.put("p_logged_in_user", AES.decrypt(getAppListReq.getLoggedInUserId(), Constant.SALT_AES));
+		} else {
+			params.put("p_logged_in_user", 0);
+		}
+		params.put("p_logged_in_user_person_type", getAppListReq.getLoggedInUserPersonType());
+		try {
+			List<ApplicationList> appList = jdbcTemplate.query(query, params,
+					(rs, rowNum) -> new ApplicationList(rs.getLong("hi_application_id"),
+							rs.getLong("hi_form_transaction_id"), rs.getLong("form1_aphir_data_id"),
+							rs.getLong("student_id"), rs.getString("student_name"), rs.getString("school_year"),
+							rs.getString("application_no"), rs.getString("application_type"),
+							rs.getString("application_type_abbr"), rs.getString("student_school"),
+							rs.getString("student_grade"), rs.getString("application_status"),
+							rs.getString("application_status_abbr"), rs.getString("application_date"),
+							rs.getString("classification"), rs.getString("hi_period"), rs.getString("updated_on"),
+							rs.getBoolean("is_active"), rs.getString("uploaded_generated_tag")));
+
+			logger.debug("Record fetched successfully.");
+
+			return appList;
+
+		} catch (Exception e) {
+			logger.error("Exception occured while calling database function fn_get_hi_application_list: {} {}",
+					e.getMessage(), e);
+			throw e;
+		}
+	}
+
+	public List<Long> getAppDetailsCount(GetAppListReq getAppListReq) throws Exception {
+		logger.debug("Calling db function fn_get_hi_application_list_count with parameter(s): -{}", getAppListReq);
+
+		final String query = "SELECT * FROM fn_get_hi_application_list_count(:p_school_year,:p_status,:p_student,:p_school_code,:p_grade_id,:p_application_no,:p_application_date,:p_all_application,:p_logged_in_user,:p_logged_in_user_person_type)";
+
+		Map<String, Object> params = new HashMap<>();
+
+		params.put("p_school_year", getAppListReq.getSchoolYear());
+		params.put("p_status", getAppListReq.getStatus());
+		params.put("p_student", getAppListReq.getstudent());
+		params.put("p_school_code", getAppListReq.getSchoolCode());
+		params.put("p_grade_id", getAppListReq.getGradeId());
+		params.put("p_application_no", getAppListReq.getApplicationNo());
+		params.put("p_application_date", getAppListReq.getApplicationDate());
+		params.put("p_all_application", getAppListReq.getAllApplication());
+		if (StringUtils.isNotEmpty(getAppListReq.getLoggedInUserId())) {
+			params.put("p_logged_in_user", AES.decrypt(getAppListReq.getLoggedInUserId(), Constant.SALT_AES));
+		} else {
+			params.put("p_logged_in_user", 0);
+		}
+		params.put("p_logged_in_user_person_type", getAppListReq.getLoggedInUserPersonType());
+
+		try {
+			List<Long> appDetailsResp = jdbcTemplate.query(query, params, (rs, rowNum) -> Long.valueOf(
+
+					rs.getLong("count")
+
+			));
+
+			logger.debug("Record fetched successfully.");
+
+			return appDetailsResp;
+
+		} catch (Exception e) {
+			logger.error("Exception occured while calling database function fn_get_hi_application_list_count: {} {}",
+					e.getMessage(), e);
+			throw e;
+		}
+	}
+
+	public List<UpdateHIActivityResp> updateHIActivity(UpdateHIActivityReq formDocReq) throws Exception {
+		logger.debug("Calling db function fn_update_hi_activity with parameter(s): -{}", formDocReq);
+
+		final String query = "SELECT * FROM fn_update_hi_activity(:p_hi_application_id,:p_activity,:p_status,:p_comment,:p_action_taken_by,:p_action_taken_by_person_type)";
+
+		Map<String, Object> params = new HashMap<>();
+		params.put("p_hi_application_id", formDocReq.getApplicationId());
+		params.put("p_activity", formDocReq.getActivity());
+		params.put("p_status", formDocReq.getStatus());
+		params.put("p_comment", formDocReq.getComment());
+		if (StringUtils.isNotEmpty(formDocReq.getActionTakenBy())) {
+			params.put("p_action_taken_by", AES.decrypt(formDocReq.getActionTakenBy(), Constant.SALT_AES));
+		} else {
+			params.put("p_action_taken_by", 0);
+		}
+		params.put("p_action_taken_by_person_type", formDocReq.getActionTakenByPersonType());
+
+		try {
+			List<UpdateHIActivityResp> updatedList = jdbcTemplate.query(query, params,
+					(rs, rowNum) -> new UpdateHIActivityResp(rs.getLong("tag_id"), rs.getString("application_no"),
+							rs.getString("application_status"), rs.getString("application_status_abbrev")));
+
+			logger.debug("Record updated successfully.");
+
+			return updatedList;
+
+		} catch (Exception e) {
+			logger.error("Exception occurred while calling database function fn_update_hi_activity: {} {}",
+					e.getMessage(), e);
+			throw e;
+		}
+	}
+
+	public List<Long> updateHIApplication(UpdateHIApplicationReq formDocReq) throws Exception {
+		logger.debug("Calling db function fn_update_hi_application with parameter(s): -{}", formDocReq);
+
+		final String query = "SELECT * FROM fn_update_hi_application(:p_indicator,:p_id,:p_student_id,:p_school_year,:p_application_type,:p_school_code,"
+				+ ":p_grade_id,:p_request_date,:p_classification,:p_submitted_by,:p_submitted_person_type)";
+
+		Map<String, Object> params = new HashMap<>();
+		params.put("p_indicator", formDocReq.getIndicator());
+		params.put("p_id", formDocReq.getId());
+		if (StringUtils.isEmpty(formDocReq.getStudentId())) {
+			params.put("p_student_id", 0);
+		} else {
+			params.put("p_student_id", AES.decrypt(formDocReq.getStudentId(), Constant.SALT_AES));
+		}
+		params.put("p_school_year", formDocReq.getSchoolYear());
+		params.put("p_application_type", formDocReq.getApplicationType());
+		params.put("p_school_code", formDocReq.getSchoolCode());
+		params.put("p_grade_id", formDocReq.getGradeId());
+		params.put("p_request_date", formDocReq.getRequestDate());
+		params.put("p_classification", formDocReq.getClassification());
+		if (StringUtils.isNotEmpty(formDocReq.getSubmittedBy())) {
+			params.put("p_submitted_by", AES.decrypt(formDocReq.getSubmittedBy(), Constant.SALT_AES));
+		} else {
+			params.put("p_submitted_by", 0);
+		}
+		params.put("p_submitted_person_type", formDocReq.getSubmittedByPersonType());
+
+		try {
+			List<Long> updatedList = jdbcTemplate.query(query, params,
+					(rs, rowNum) -> Long.valueOf(rs.getLong("tag_id")));
+
+			logger.debug("Record updated successfully.");
+
+			return updatedList;
+
+		} catch (Exception e) {
+			logger.error("Exception occurred while calling database function fn_update_hi_application: {} {}",
+					e.getMessage(), e);
+			throw e;
+		}
+	}
+
+	public List<AppStatusListResp> applicationStatusList(String userType) throws Exception {
+		logger.debug("Calling db function fn_get_application_status_list with parameter(s): -{}", userType);
+
+		final String query = "SELECT * FROM fn_get_application_status_list(:p_user_type)";
+
+		Map<String, Object> params = new HashMap<>();
+		params.put("p_user_type", userType);
+
+		try {
+			List<AppStatusListResp> statusList = jdbcTemplate.query(query, params, (rs,
+					rowNum) -> new AppStatusListResp(rs.getString("applnsts_abbvrs"), rs.getString("status_text")));
+
+			logger.debug("Record fetched successfully.");
+
+			return statusList;
+
+		} catch (Exception e) {
+			logger.error("Exception occurred while calling database function fn_get_application_status_list: {} {}",
+					e.getMessage(), e);
+			throw e;
+		}
+	}
+
+	public List<ApplicationSummaryResp> applicationSummary(String schoolYear, String loggedInUser,
+			String loggedInUserPersonType) throws Exception {
+
+		logger.debug(
+				"Calling db function fn_get_application_summary with parameter(s): schoolYear={}, loggedInUser={}, loggedInUserPersonType={}",
+				schoolYear, loggedInUser, loggedInUserPersonType);
+
+		final String query = "SELECT * FROM fn_get_application_summary(" + ":p_school_year, " + ":p_logged_in_user, "
+				+ ":p_logged_in_user_person_type)";
+
+		Map<String, Object> params = new HashMap<>();
+		params.put("p_school_year", schoolYear);
+
+		if (StringUtils.isNotEmpty(loggedInUser)) {
+			params.put("p_logged_in_user", AES.decrypt(loggedInUser, Constant.SALT_AES));
+		} else {
+			params.put("p_logged_in_user", 0);
+		}
+		params.put("p_logged_in_user_person_type", loggedInUserPersonType);
+
+		try {
+
+			List<ApplicationSummaryResp> summaryList = jdbcTemplate.query(query, params,
+					(rs, rowNum) -> new ApplicationSummaryResp(rs.getString("status_abbreviation"),
+							rs.getString("status_name"), rs.getLong("application_count")));
+
+			logger.debug("Record fetched successfully.");
+
+			return summaryList;
+
+		} catch (Exception e) {
+
+			logger.error("Exception occurred while calling database function fn_get_application_summary: {} {}",
+					e.getMessage(), e);
+
+			throw e;
+		}
+	}
+
+	public List<SchoolResp> getSchoolResp() throws Exception {
+
+		logger.debug("Calling db function fn_get_school_list");
+
+		final String query = "SELECT * FROM fn_get_school_list()";
+
+		Map<String, Object> params = new HashMap<>();
+
+		try {
+
+			return jdbcTemplate.query(query, params, (rs, rowNum) -> new SchoolResp(
+
+					rs.getLong("school_id"), rs.getString("school_code"), rs.getString("school_name")
+
+			));
+
+		} catch (Exception e) {
+			logger.error("Exception occured while calling database function fn_get_school_list: {} {}", e.getMessage(),
+					e);
+			throw new Exception(e);
+		}
+	}
+
+	public List<GradeListResp> getGradeList() throws Exception {
+		logger.debug("Calling db function fn_get_grade_list with parameter(s):");
+
+		final String query = "SELECT * FROM fn_get_grade_list()";
+
+		Map<String, Object> params = new HashMap<>();
+
+		try {
+			List<GradeListResp> gradeList = jdbcTemplate.query(query, params, (rs, rowNum) -> new GradeListResp(
+
+					rs.getInt("grade_id"),
+
+					rs.getString("grade")
+
+			));
+
+			logger.debug("Record grade list fetched successfully.");
+
+			return gradeList;
+
+		} catch (Exception e) {
+			logger.error("Exception occured while calling database function fn_get_grade_list: {} {}", e.getMessage(),
+					e);
+			throw new Exception(e);
+		}
+	}
+
+	public List<Long> updateAssignTeacher(UpdateAssignTeacherReq updateAssignTeacherReq) throws Exception {
+		logger.debug("Calling db function fn_update_assign_teacher with parameter(s): -{}", updateAssignTeacherReq);
+
+		final String query = "SELECT * FROM fn_update_assign_teacher(:p_hi_application_id,:p_emp_ids,:p_logged_in_user,:p_logged_in_user_person_type)";
+
+		Map<String, Object> params = new HashMap<>();
+		params.put("p_hi_application_id", updateAssignTeacherReq.getApplicationId());
+		params.put("p_emp_ids", updateAssignTeacherReq.getEmployeeIds());
+		if (StringUtils.isNotEmpty(updateAssignTeacherReq.getActionTakenBy())) {
+			params.put("p_logged_in_user", AES.decrypt(updateAssignTeacherReq.getActionTakenBy(), Constant.SALT_AES));
+		} else {
+			params.put("p_logged_in_user", 0);
+		}
+		params.put("p_logged_in_user_person_type", updateAssignTeacherReq.getActionTakenByPersonType());
+
+		try {
+			List<Long> updatedList = jdbcTemplate.query(query, params,
+					(rs, rowNum) -> Long.valueOf(rs.getLong("tag_id")));
+
+			logger.debug("Record updated successfully.");
+
+			return updatedList;
+
+		} catch (Exception e) {
+			logger.error("Exception occurred while calling database function fn_update_assign_teacher: {} {}",
+					e.getMessage(), e);
+			throw e;
+		}
+	}
+}

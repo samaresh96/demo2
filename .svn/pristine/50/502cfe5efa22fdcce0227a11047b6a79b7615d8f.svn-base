@@ -1,0 +1,178 @@
+/*
+ * Copyright (C) YYYY-YYYY XXXXXXXXXXXXX
+ * mailto:AAAA@DDDD.COM
+ *
+ */
+package com.jcboe.home.instruction.controller;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.jcboe.home.instruction.model.request.ApplicationTrackingRequest;
+import com.jcboe.home.instruction.model.request.GetAppListReq;
+import com.jcboe.home.instruction.model.request.UpdateAssignTeacherReq;
+import com.jcboe.home.instruction.model.request.UpdateHIActivityReq;
+import com.jcboe.home.instruction.model.request.UpdateHIApplicationReq;
+import com.jcboe.home.instruction.response.ApplicationListResponseDTO;
+import com.jcboe.home.instruction.response.ApplicationTrackingResp;
+import com.jcboe.home.instruction.response.ApplicationTrackingResponseDTO;
+import com.jcboe.home.instruction.response.AssignTeacherResponse;
+import com.jcboe.home.instruction.response.GetApplicationInfoResp;
+import com.jcboe.home.instruction.response.HIActivityResponseDTO;
+import com.jcboe.home.instruction.response.UpdateApplicationResp;
+import com.jcboe.home.instruction.service.ApplicationListServiceImpl;
+import com.jcboe.home.instruction.service.IMessageService;
+import com.jcboe.home.instruction.utilities.Constant;
+
+@RestController
+public class ApplicationController {
+	private ApplicationListServiceImpl applicationListServiceImpl;
+	private IMessageService iMessageService;
+
+	public ApplicationController(ApplicationListServiceImpl applicationListServiceImpl,
+			IMessageService iMessageService) {
+		this.applicationListServiceImpl = applicationListServiceImpl;
+		this.iMessageService = iMessageService;
+	}
+
+	@PostMapping(path = "/GetApplicationList", consumes = "application/json", produces = "application/json")
+	ResponseEntity<ApplicationListResponseDTO> getApplicationList(@RequestBody GetAppListReq getAppDetailsReq) {
+
+		iMessageService.getMessage(Constant.ALS_GAL);
+
+		ApplicationListResponseDTO response = applicationListServiceImpl.getAppList(getAppDetailsReq);
+
+		return new ResponseEntity<ApplicationListResponseDTO>(response, HttpStatus.OK);
+
+	}
+
+	@GetMapping(value = "/GetApplicationInfo", produces = "application/json")
+	public ResponseEntity<GetApplicationInfoResp> getApplicationInfo(
+			@RequestParam(name = "id", required = true) Long id,
+			@RequestParam(name = "applicationId", required = true) Long applicationId,
+			@RequestParam(name = "formMasterId", required = true) Long formMasterId,
+			@RequestParam(name = "loggedInUserId", required = true) String loggedInUserId,
+			@RequestParam(name = "loggedInUserPersonType", required = false) String loggedInUserPersonType,
+			@RequestParam(name = "configKeys", required = false) String configKeys,
+			@RequestParam(name = "lookupValues", required = false) String lookupValues,
+			@RequestParam(name = "isFormMaster", required = false) boolean isFormMaster,
+			@RequestParam(name = "isPdfDetail", required = false) boolean isPdfDetail,
+			@RequestParam(name = "isAttchment", required = false) boolean isAttchment,
+			@RequestParam(name = "isNotification", required = false) boolean isNotification,
+			@RequestParam(name = "isStudent", required = false) boolean isStudent) {
+		try {
+			iMessageService.getMessage(Constant.FUC_GFI);
+			GetApplicationInfoResp response = applicationListServiceImpl.getApplicationInfo(id, applicationId,
+					formMasterId, loggedInUserId, loggedInUserPersonType, configKeys, lookupValues, isFormMaster,
+					isPdfDetail, isAttchment, isNotification, isStudent);
+
+			return new ResponseEntity<GetApplicationInfoResp>(response, HttpStatus.OK);
+		} finally {
+			Constant.getMessageMap().clear();
+		}
+	}
+
+	@PostMapping(path = "/UpdateApplication", consumes = "application/json", produces = "application/json")
+	ResponseEntity<UpdateApplicationResp> updateApplication(
+			@RequestBody UpdateHIApplicationReq updateHIApplicationReq) {
+		try {
+			iMessageService.getMessage(Constant.RHID_UCF);
+
+			UpdateApplicationResp response = applicationListServiceImpl.updateApplication(updateHIApplicationReq);
+
+			return new ResponseEntity<>(response, HttpStatus.OK);
+		} finally {
+			Constant.getMessageMap().clear();
+		}
+	}
+
+	/*
+	 * 
+	 * Date: 19-Aug-2026 Method: UpdateApplicationTracking Purpose: For
+	 * 
+	 * 
+	 */
+	@PostMapping(path = "/UpdateApplicationTracking", consumes = "application/json", produces = "application/json")
+	ResponseEntity<ApplicationTrackingResp> updateApplicationTracking(
+			@RequestBody ApplicationTrackingRequest applicationTrackingRequest) {
+		try {
+			iMessageService.getMessage(Constant.RHID_UCF);
+
+			ApplicationTrackingResp response = applicationListServiceImpl
+					.updateApplicationTrackingData(applicationTrackingRequest);
+
+			return new ResponseEntity<>(response, HttpStatus.OK);
+		} finally {
+			Constant.getMessageMap().clear();
+		}
+	}
+
+	/*
+	 * 
+	 * Date: 19-Aug-2026 Method: GetApplicationTrackingList Purpose: For
+	 * 
+	 * 
+	 */
+
+	@GetMapping(value = "/GetApplicationTrackingList", produces = "application/json")
+	public ResponseEntity<ApplicationTrackingResponseDTO> getApplicationTrackingList(
+			@RequestParam(name = "applicationIds", required = true) String applicationIds,
+			@RequestParam(name = "schoolYear", required = false) String schoolYear,
+			@RequestParam(name = "loggedInUser", required = false) String loggedInUser,
+			@RequestParam(name = "loggedInUserPersonType", required = false) String loggedInUserPersonType,
+			@RequestParam(name = "configKeys", required = false) String configKeys,
+			@RequestParam(name = "lookupValues", required = false) String lookupValues) {
+		try {
+			ApplicationTrackingResponseDTO response = applicationListServiceImpl.getApplicationTrackingData(
+					applicationIds, schoolYear, loggedInUser, loggedInUserPersonType, configKeys, lookupValues);
+
+			return new ResponseEntity<ApplicationTrackingResponseDTO>(response, HttpStatus.OK);
+		} finally {
+			Constant.getMessageMap().clear();
+		}
+	}
+
+	/*
+	 * 
+	 * Date: 20-Aug-2026 Method: UpdateActivity Purpose: For
+	 * 
+	 * 
+	 */
+	@PostMapping(path = "/UpdateActivity", consumes = "application/json", produces = "application/json")
+	ResponseEntity<HIActivityResponseDTO> updateActivity(@RequestBody UpdateHIActivityReq hIActivityRequest) {
+		try {
+			iMessageService.getMessage(Constant.HIA_UHA);
+
+			HIActivityResponseDTO response = applicationListServiceImpl.updateActivity(hIActivityRequest);
+
+			return new ResponseEntity<HIActivityResponseDTO>(response, HttpStatus.OK);
+		} finally {
+			Constant.getMessageMap().clear();
+		}
+	}
+
+	/*
+	 * 
+	 * Date: 29-Aug-2026 Method: UpdateAssignTeacher Purpose: For
+	 * 
+	 * 
+	 */
+	@PostMapping(path = "/UpdateAssignTeacher", consumes = "application/json", produces = "application/json")
+	ResponseEntity<AssignTeacherResponse> updateAssignTeacher(
+			@RequestBody UpdateAssignTeacherReq updateAssignTeacherReq) {
+		try {
+			iMessageService.getMessage(Constant.UAT_API);
+
+			AssignTeacherResponse response = applicationListServiceImpl.updateAssignTeacher(updateAssignTeacherReq);
+
+			return new ResponseEntity<AssignTeacherResponse>(response, HttpStatus.OK);
+		} finally {
+			Constant.getMessageMap().clear();
+		}
+	}
+}

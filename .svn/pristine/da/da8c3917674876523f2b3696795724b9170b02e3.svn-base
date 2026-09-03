@@ -1,0 +1,316 @@
+package com.jcboe.home.instruction.controller;
+
+import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.Mockito;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+
+import com.jcboe.home.instruction.model.request.ApplicationTrackingRequest;
+import com.jcboe.home.instruction.model.request.GetAppListReq;
+import com.jcboe.home.instruction.model.request.UpdateAssignTeacherReq;
+import com.jcboe.home.instruction.model.request.UpdateHIActivityReq;
+import com.jcboe.home.instruction.model.request.UpdateHIApplicationReq;
+import com.jcboe.home.instruction.response.ApplicationListResponseDTO;
+import com.jcboe.home.instruction.response.ApplicationTrackingResp;
+import com.jcboe.home.instruction.response.ApplicationTrackingResponseDTO;
+import com.jcboe.home.instruction.response.AssignTeacherResponse;
+import com.jcboe.home.instruction.response.HIActivityResponseDTO;
+import com.jcboe.home.instruction.response.UpdateApplicationResp;
+import com.jcboe.home.instruction.service.ApplicationListServiceImpl;
+import com.jcboe.home.instruction.service.IMessageService;
+import com.jcboe.home.instruction.utilities.Constant;
+
+@ExtendWith(MockitoExtension.class)
+class ApplicationControllerTest {
+
+	@Mock
+	private ApplicationListServiceImpl applicationListServiceImpl;
+
+	@Mock
+	private IMessageService iMessageService;
+
+	@InjectMocks
+	private ApplicationController applicationController;
+
+	@Test
+	void testGetAppList() {
+
+		GetAppListReq request = new GetAppListReq();
+		ApplicationListResponseDTO responseDTO = new ApplicationListResponseDTO();
+
+		when(applicationListServiceImpl.getAppList(request)).thenReturn(responseDTO);
+
+		ResponseEntity<ApplicationListResponseDTO> response = applicationController.getApplicationList(request);
+
+		assertEquals(HttpStatus.OK, response.getStatusCode());
+		assertEquals(responseDTO, response.getBody());
+
+		verify(iMessageService).getMessage(Constant.ALS_GAL);
+		verify(applicationListServiceImpl).getAppList(request);
+	}
+
+	@Test
+	void testGetApplicationInfo() throws Exception {
+		when(applicationListServiceImpl.getApplicationInfo(0L, 0L, 0L, "", "", "", null, false, false, false, false, false)).thenReturn(null);
+		applicationController.getApplicationInfo(0L, 0L, 0L, "", "", "", null, false, false, false, false, false);
+
+	}
+
+	@Test
+	void testUpdateApplication() throws Exception {
+//		when(applicationListServiceImpl.updateApplication(new UpdateHIApplicationReq())).thenReturn(new UpdateApplicationResp());
+//		applicationController.updateApplication(new UpdateHIApplicationReq());
+
+		UpdateHIApplicationReq request = new UpdateHIApplicationReq();
+		UpdateApplicationResp responseDTO = new UpdateApplicationResp();
+
+		when(applicationListServiceImpl.updateApplication(request)).thenReturn(responseDTO);
+
+		ResponseEntity<UpdateApplicationResp> response = applicationController.updateApplication(request);
+
+		assertEquals(HttpStatus.OK, response.getStatusCode());
+		assertEquals(responseDTO, response.getBody());
+
+		verify(iMessageService).getMessage(Constant.ALS_GAL);
+		verify(applicationListServiceImpl).updateApplication(request);
+
+	}
+
+	@Test
+	void testUpdateApplicationTracking_Success() {
+
+		ApplicationTrackingRequest request = new ApplicationTrackingRequest();
+
+		ApplicationTrackingResp expectedResponse = new ApplicationTrackingResp();
+
+		Mockito.doNothing().when(iMessageService).getMessage(Constant.RHID_UCF);
+
+		Mockito.when(applicationListServiceImpl.updateApplicationTrackingData(request)).thenReturn(expectedResponse);
+
+		ResponseEntity<ApplicationTrackingResp> response = applicationController.updateApplicationTracking(request);
+
+		assertNotNull(response);
+		assertEquals(HttpStatus.OK, response.getStatusCode());
+		assertEquals(expectedResponse, response.getBody());
+
+		Mockito.verify(iMessageService, Mockito.times(1)).getMessage(Constant.RHID_UCF);
+
+		Mockito.verify(applicationListServiceImpl, Mockito.times(1)).updateApplicationTrackingData(request);
+
+		assertTrue(Constant.getMessageMap().isEmpty());
+	}
+
+	@Test
+	void testUpdateApplicationTracking_Exception() {
+
+		ApplicationTrackingRequest request = new ApplicationTrackingRequest();
+
+		RuntimeException exception = new RuntimeException("Update failed");
+
+		Mockito.doNothing().when(iMessageService).getMessage(Constant.RHID_UCF);
+
+		Mockito.when(applicationListServiceImpl.updateApplicationTrackingData(request)).thenThrow(exception);
+
+		RuntimeException thrown = assertThrows(RuntimeException.class,
+				() -> applicationController.updateApplicationTracking(request));
+
+		assertEquals("Update failed", thrown.getMessage());
+
+		Mockito.verify(iMessageService, Mockito.times(1)).getMessage(Constant.RHID_UCF);
+
+		Mockito.verify(applicationListServiceImpl, Mockito.times(1)).updateApplicationTrackingData(request);
+
+		assertTrue(Constant.getMessageMap().isEmpty());
+	}
+
+	@Test
+	void testGetApplicationTracking_Success() {
+		String id = "100";
+		String schoolYear = "2026";
+		String configKeys = "KEY1,KEY2";
+		String lookupValues = "VALUE1,VALUE2";
+		String loginUser = "KfftbXVM2qI3/V2Mhy3MKQ==";
+		String loginUserPersonType = "PRNT";
+
+		ApplicationTrackingResponseDTO expectedResponse = new ApplicationTrackingResponseDTO();
+
+		Mockito.doNothing().when(iMessageService).getMessage(Constant.HIC_HSA);
+
+		Mockito.when(applicationListServiceImpl.getApplicationTrackingData(id, schoolYear, configKeys,
+				loginUserPersonType, loginUserPersonType, lookupValues)).thenReturn(expectedResponse);
+
+		ResponseEntity<ApplicationTrackingResponseDTO> response = applicationController.getApplicationTrackingList(id,
+				schoolYear, configKeys, loginUserPersonType, loginUserPersonType, lookupValues);
+
+		assertNotNull(response);
+		assertEquals(HttpStatus.OK, response.getStatusCode());
+		assertEquals(expectedResponse, response.getBody());
+
+		Mockito.verify(iMessageService, Mockito.times(1)).getMessage(Constant.HIC_HSA);
+
+		Mockito.verify(applicationListServiceImpl, Mockito.times(1)).getApplicationTrackingData(id, schoolYear,
+				configKeys, loginUserPersonType, loginUserPersonType, lookupValues);
+
+		assertTrue(Constant.getMessageMap().isEmpty());
+	}
+
+	@Test
+	void testGetApplicationTracking_Exception() {
+
+		String id = "100";
+		String schoolYear = "2026";
+		String configKeys = "KEY1,KEY2";
+		String lookupValues = "VALUE1,VALUE2";
+		String loginUser = "KfftbXVM2qI3/V2Mhy3MKQ==";
+		String loginUserPersonType = "PRNT";
+
+		RuntimeException exception = new RuntimeException("Unable to fetch application tracking");
+
+		Mockito.doNothing().when(iMessageService).getMessage(Constant.HIC_HSA);
+
+		Mockito.when(applicationListServiceImpl.getApplicationTrackingData(id, schoolYear, configKeys, loginUser,
+				loginUserPersonType, lookupValues)).thenThrow(exception);
+
+		RuntimeException thrown = assertThrows(RuntimeException.class, () -> applicationController
+				.getApplicationTrackingList(id, schoolYear, configKeys, loginUser, loginUserPersonType, lookupValues));
+
+		assertEquals("Unable to fetch application tracking", thrown.getMessage());
+
+		Mockito.verify(iMessageService, Mockito.times(1)).getMessage(Constant.HIC_HSA);
+
+		Mockito.verify(applicationListServiceImpl, Mockito.times(1)).getApplicationTrackingData(id, schoolYear,
+				configKeys, loginUserPersonType, loginUserPersonType, lookupValues);
+
+		assertTrue(Constant.getMessageMap().isEmpty());
+	}
+
+	@Test
+	void testUpdateActivity() {
+
+		UpdateHIActivityReq request = new UpdateHIActivityReq();
+		HIActivityResponseDTO responseDTO = new HIActivityResponseDTO();
+
+		when(applicationListServiceImpl.updateActivity(request)).thenReturn(responseDTO);
+
+		ResponseEntity<HIActivityResponseDTO> response = applicationController.updateActivity(request);
+
+		assertNotNull(response);
+		assertEquals(HttpStatus.OK, response.getStatusCode());
+		assertEquals(responseDTO, response.getBody());
+
+		verify(iMessageService, times(1)).getMessage(Constant.HIA_UHA);
+		verify(applicationListServiceImpl, times(1)).updateActivity(request);
+	}
+
+	@Test
+	void testUpdateActivity_MessageMapCleared() {
+
+		UpdateHIActivityReq request = new UpdateHIActivityReq();
+		HIActivityResponseDTO responseDTO = new HIActivityResponseDTO();
+
+		Constant.getMessageMap().put("TEST", "VALUE");
+
+		when(applicationListServiceImpl.updateActivity(request)).thenReturn(responseDTO);
+
+		applicationController.updateActivity(request);
+
+		assertTrue(Constant.getMessageMap().isEmpty());
+
+		verify(iMessageService, times(1)).getMessage(Constant.HIA_UHA);
+		verify(applicationListServiceImpl, times(1)).updateActivity(request);
+	}
+
+	@Test
+	void testUpdateActivity_Exception_MessageMapCleared() {
+
+		UpdateHIActivityReq request = new UpdateHIActivityReq();
+
+		Constant.getMessageMap().put("TEST", "VALUE");
+
+		when(applicationListServiceImpl.updateActivity(request))
+				.thenThrow(new RuntimeException("Update activity failed"));
+
+		RuntimeException exception = assertThrows(RuntimeException.class,
+				() -> applicationController.updateActivity(request));
+
+		assertEquals("Update activity failed", exception.getMessage());
+		assertTrue(Constant.getMessageMap().isEmpty());
+
+		verify(iMessageService, times(1)).getMessage(Constant.HIA_UHA);
+		verify(applicationListServiceImpl, times(1)).updateActivity(request);
+	}
+
+	@Test
+	void testUpdateAssignTeacher() {
+
+		UpdateAssignTeacherReq request = new UpdateAssignTeacherReq();
+
+		AssignTeacherResponse responseDTO = new AssignTeacherResponse();
+
+		when(applicationListServiceImpl.updateAssignTeacher(request)).thenReturn(responseDTO);
+
+		ResponseEntity<AssignTeacherResponse> response = applicationController.updateAssignTeacher(request);
+
+		assertNotNull(response);
+		assertEquals(HttpStatus.OK, response.getStatusCode());
+		assertEquals(responseDTO, response.getBody());
+
+		verify(iMessageService, times(1)).getMessage(Constant.UAT_API);
+		verify(applicationListServiceImpl, times(1)).updateAssignTeacher(request);
+	}
+
+	@Test
+	void testUpdateAssignTeacher_MessageMapCleared() {
+
+		UpdateAssignTeacherReq request = new UpdateAssignTeacherReq();
+
+		AssignTeacherResponse responseDTO = new AssignTeacherResponse();
+
+		Constant.getMessageMap().put("TEST", "VALUE");
+
+		when(applicationListServiceImpl.updateAssignTeacher(request)).thenReturn(responseDTO);
+
+		ResponseEntity<AssignTeacherResponse> response = applicationController.updateAssignTeacher(request);
+
+		assertNotNull(response);
+		assertEquals(HttpStatus.OK, response.getStatusCode());
+		assertEquals(responseDTO, response.getBody());
+
+		assertTrue(Constant.getMessageMap().isEmpty());
+
+		verify(iMessageService, times(1)).getMessage(Constant.UAT_API);
+		verify(applicationListServiceImpl, times(1)).updateAssignTeacher(request);
+	}
+
+	@Test
+	void testUpdateAssignTeacher_Exception_MessageMapCleared() {
+
+		UpdateAssignTeacherReq request = new UpdateAssignTeacherReq();
+
+		Constant.getMessageMap().put("TEST", "VALUE");
+
+		when(applicationListServiceImpl.updateAssignTeacher(request))
+				.thenThrow(new RuntimeException("Update assign teacher failed"));
+
+		RuntimeException exception = assertThrows(RuntimeException.class,
+				() -> applicationController.updateAssignTeacher(request));
+
+		assertEquals("Update assign teacher failed", exception.getMessage());
+		assertTrue(Constant.getMessageMap().isEmpty());
+
+		verify(iMessageService, times(1)).getMessage(Constant.UAT_API);
+		verify(applicationListServiceImpl, times(1)).updateAssignTeacher(request);
+	}
+}

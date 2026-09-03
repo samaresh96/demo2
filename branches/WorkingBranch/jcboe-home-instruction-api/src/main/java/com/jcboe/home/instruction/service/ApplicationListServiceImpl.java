@@ -1,0 +1,459 @@
+/*
+ * Copyright (C) YYYY-YYYY XXXXXXXXXXXXX
+ * mailto:AAAA@DDDD.COM
+ *
+ */
+package com.jcboe.home.instruction.service;
+
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+
+import javax.servlet.http.HttpServletResponse;
+
+import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.jcboe.home.instruction.exception.HomeInstructionException;
+import com.jcboe.home.instruction.model.request.ApplicationTrackingRequest;
+import com.jcboe.home.instruction.model.request.GetAppListReq;
+import com.jcboe.home.instruction.model.request.UpdateAssignTeacherReq;
+import com.jcboe.home.instruction.model.request.UpdateHIActivityReq;
+import com.jcboe.home.instruction.model.request.UpdateHIApplicationReq;
+import com.jcboe.home.instruction.repo.AppConfigRepo;
+import com.jcboe.home.instruction.repo.ApplicationListRepo;
+import com.jcboe.home.instruction.repo.HomeInstructionRepo;
+import com.jcboe.home.instruction.repo.UserDetailsRepo;
+import com.jcboe.home.instruction.response.AppStatusListResp;
+import com.jcboe.home.instruction.response.ApplicationInfoResp;
+import com.jcboe.home.instruction.response.ApplicationList;
+import com.jcboe.home.instruction.response.ApplicationListResponseDTO;
+import com.jcboe.home.instruction.response.ApplicationSummaryResp;
+import com.jcboe.home.instruction.response.ApplicationTrackingResp;
+import com.jcboe.home.instruction.response.ApplicationTrackingResponseDTO;
+import com.jcboe.home.instruction.response.AssignTeacherResponse;
+import com.jcboe.home.instruction.response.GetApplicationInfoResp;
+import com.jcboe.home.instruction.response.GetApplicationTrackingResp;
+import com.jcboe.home.instruction.response.GetPhysicianInfoResp;
+import com.jcboe.home.instruction.response.GradeListResp;
+import com.jcboe.home.instruction.response.HIActivityResponseDTO;
+import com.jcboe.home.instruction.response.HIFormMasterResp;
+import com.jcboe.home.instruction.response.HIFormTransactionResp;
+import com.jcboe.home.instruction.response.LookupDetails;
+import com.jcboe.home.instruction.response.NotificationList;
+import com.jcboe.home.instruction.response.SchoolResp;
+import com.jcboe.home.instruction.response.StudentDataResp;
+import com.jcboe.home.instruction.response.TeacherListResp;
+import com.jcboe.home.instruction.response.UpdateApplicationResp;
+import com.jcboe.home.instruction.response.UpdateHIActivityResp;
+import com.jcboe.home.instruction.utilities.Constant;
+import com.jcboe.home.instruction.utilities.Utility;
+
+/*
+ * 
+ * Date: 06-Feb-2025
+ * Class: ApplicationListServiceImpl.java
+ *
+ */
+@Service
+public class ApplicationListServiceImpl implements IApplicationListServiceImpl {
+	private final Logger logger = LogManager.getLogger(ApplicationListServiceImpl.class);
+
+	private Utility utility;
+	private ApplicationListRepo applicationListRepo;
+	private UserDetailsRepo userDetailsRepo;
+	private HomeInstructionRepo homeInstructionRepo;
+	private FileUploadServiceImpl uploadService;
+	private AppConfigRepo appConfigRepo;
+
+	public ApplicationListServiceImpl(Utility utility, ApplicationListRepo applicationListRepo,
+			UserDetailsRepo userDetailsRepo, HomeInstructionRepo homeInstructionRepo,
+			FileUploadServiceImpl uploadService, AppConfigRepo appConfigRepo) {
+		this.utility = utility;
+		this.applicationListRepo = applicationListRepo;
+		this.userDetailsRepo = userDetailsRepo;
+		this.homeInstructionRepo = homeInstructionRepo;
+		this.uploadService = uploadService;
+		this.appConfigRepo = appConfigRepo;
+	}
+
+	@Override
+	public ApplicationListResponseDTO getAppList(GetAppListReq getAppListReq) {
+
+		logger.debug("Request for getAppDetailsData API: \n{}",
+				utility.printJson(getAppListReq) != null ? utility.printJson(getAppListReq) : getAppListReq);
+		try {
+
+			List<AppStatusListResp> statusList = applicationListRepo
+					.applicationStatusList(getAppListReq.getLoggedInUserPersonType());
+
+			List<ApplicationList> appList = applicationListRepo.getApplicationDetails(getAppListReq);
+
+			List<Long> countList = applicationListRepo.getAppDetailsCount(getAppListReq);
+			List<LookupDetails> lookupTypeList = new ArrayList<>();
+			if (StringUtils.isNotBlank(getAppListReq.getLookupType())) {
+				lookupTypeList = userDetailsRepo.getLookupValues(getAppListReq.getLookupType());
+			}
+			Map<String, String> configKeyList = Collections.emptyMap();
+			if (StringUtils.isNotBlank(getAppListReq.getConfigKeys())) {
+				configKeyList = utility.getConfigList(getAppListReq.getConfigKeys());
+			}
+
+			ApplicationListResponseDTO applist = null;
+			if (!appList.isEmpty()) {
+
+				applist = new ApplicationListResponseDTO(true, Constant.getMessageMap().get(Constant.GAL_RFS),
+						utility.responseDate(LocalDateTime.now()), Collections.emptyMap(), lookupTypeList, appList,
+						countList.get(0), statusList, new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
+				applist.setConfigList(configKeyList);
+				applist.setLookupList(lookupTypeList);
+
+			} else {
+				applist = new ApplicationListResponseDTO(true, Constant.getMessageMap().get(Constant.GAL_RNF),
+						utility.responseDate(LocalDateTime.now()), Collections.emptyMap(), lookupTypeList,
+						new ArrayList<>(), 0L, statusList, new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
+				applist.setLookupList(new ArrayList<>());
+				applist.setConfigList(configKeyList);
+				applist.setLookupList(lookupTypeList);
+			}
+			if (Boolean.TRUE.equals(getAppListReq.getIsSummery())) {
+				List<ApplicationSummaryResp> summeryrespList = applicationListRepo.applicationSummary(
+						getAppListReq.getSchoolYear(), getAppListReq.getLoggedInUserId(),
+						getAppListReq.getLoggedInUserPersonType());
+
+				applist.setApplicationSummaryList(summeryrespList);
+
+			}
+			if (Boolean.TRUE.equals(getAppListReq.getIsFilteredList())) {
+				List<SchoolResp> schoolList = applicationListRepo.getSchoolResp();
+				applist.setSchoolList(schoolList);
+				List<GradeListResp> gradeList = applicationListRepo.getGradeList();
+				applist.setGradeList(gradeList);
+			}
+			return applist;
+
+		} catch (Exception e) {
+			logger.error("Exception occured while getting application list data:{} ", e.getMessage());
+			throw new HomeInstructionException(e.getMessage(), Constant.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	@SuppressWarnings("unchecked")
+	@Override
+	public GetApplicationInfoResp getApplicationInfo(Long id, Long applicationId, Long formMasterId,
+			String loggedInUserId, String loggedInUserPersonType, String configKeys, String lookupValues,
+			boolean isFormMaster, boolean isPdfDetail, boolean isAttchment, boolean isNotification, boolean isStudent) {
+
+		logger.debug("Parameter for getApplicationInfo API :id :{},applicationId :{},formMasterId :{},userType :{}", id,
+				applicationId, formMasterId, loggedInUserPersonType);
+
+		try {
+
+			List<LookupDetails> lookupTypeList = new ArrayList<>();
+			if (StringUtils.isNotBlank(lookupValues)) {
+				lookupTypeList = userDetailsRepo.getLookupValues(lookupValues);
+			}
+			Map<String, String> configKeyList = Collections.emptyMap();
+			List<HIFormMasterResp> formMasterList = new ArrayList<>();
+			if (StringUtils.isNotBlank(configKeys)) {
+				configKeyList = utility.getConfigList(configKeys);
+			}
+			List<ApplicationInfoResp> appInfoData = homeInstructionRepo.getApplicationInfoData(applicationId,
+					loggedInUserPersonType);
+			if (isFormMaster) {
+				formMasterList = homeInstructionRepo.getHIFormMasterData(loggedInUserPersonType);
+			}
+			ResponseEntity<String> getPdfDetailResp = null;
+			if (isPdfDetail) {
+				HttpServletResponse response = null;
+				getPdfDetailResp = (ResponseEntity<String>) uploadService.getPdfFileDetails(id, applicationId,
+						formMasterId, loggedInUserPersonType, appInfoData.get(0).getSchoolYear(), response);
+			}
+			List<HIFormTransactionResp> attachmentList = new ArrayList<>();
+			if (isAttchment) {
+				attachmentList = homeInstructionRepo.getHIFormTransactionData(0L, applicationId, 0L,
+						loggedInUserPersonType);
+			}
+
+			List<NotificationList> notificationList = new ArrayList<>();
+			if (isNotification) {
+				notificationList = homeInstructionRepo.getNotificationList(applicationId, loggedInUserPersonType);
+			}
+			List<StudentDataResp> studentList = new ArrayList<>();
+			if (isStudent) {
+				studentList = appConfigRepo.getStudentData("", loggedInUserId);
+			}
+
+			List<TeacherListResp> teacherList = new ArrayList<>();
+			if (StringUtils.equalsIgnoreCase(loggedInUserPersonType, "HIAP")) {
+				teacherList = userDetailsRepo.getTeacherData();
+			}
+
+			GetApplicationInfoResp commonResponse = null;
+
+			if (!appInfoData.isEmpty()) {
+				List<GetPhysicianInfoResp> physcData = homeInstructionRepo.getPhysicianInfoData(applicationId);
+				commonResponse = new GetApplicationInfoResp(true, Constant.getMessageMap().get(Constant.GFI_RFS),
+						utility.responseDate(LocalDateTime.now()), configKeyList, lookupTypeList, attachmentList,
+						formMasterList, appInfoData.get(0), getPdfDetailResp, notificationList, studentList,
+						teacherList, physcData.get(0));
+
+			} else {
+				commonResponse = new GetApplicationInfoResp(true, Constant.getMessageMap().get(Constant.GFI_RNF),
+						utility.responseDate(LocalDateTime.now()), configKeyList, lookupTypeList, new ArrayList<>(),
+						new ArrayList<>(), null, null, new ArrayList<>(), studentList, teacherList, null);
+
+			}
+
+			return commonResponse;
+
+		} catch (Exception e) {
+			logger.error("Exception occured while calling getApplicationInfo data:{} ", e.getMessage());
+			throw new HomeInstructionException(e.getMessage(), Constant.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	@Override
+	public UpdateApplicationResp updateApplication(UpdateHIApplicationReq updateHIApplicationReq) {
+
+		logger.debug("Request for updateApplication API: \n{}",
+				utility.printJson(updateHIApplicationReq) != null ? utility.printJson(updateHIApplicationReq)
+						: updateHIApplicationReq);
+
+		try {
+			if (StringUtils.equalsIgnoreCase(updateHIApplicationReq.getActivity(), "AMDFT")
+					|| StringUtils.equalsIgnoreCase(updateHIApplicationReq.getActivity(), "AMSBM")
+					|| StringUtils.equalsIgnoreCase(updateHIApplicationReq.getActivity(), "RESBM")) {
+				updateHIApplicationReq.setClassification(updateHIApplicationReq.getClassification());
+			} else {
+				updateHIApplicationReq.setClassification("GENOT");
+			}
+			List<Long> updateResp = applicationListRepo.updateHIApplication(updateHIApplicationReq);
+
+			UpdateApplicationResp commonResponse = null;
+
+			if (CollectionUtils.isNotEmpty(updateResp) && updateResp.get(0) > 0) {
+
+				if (!StringUtils.equalsIgnoreCase(updateHIApplicationReq.getIndicator(), "D")) {
+					UpdateHIActivityReq updateHIActivityReq = new UpdateHIActivityReq();
+					updateHIActivityReq.setApplicationId(updateResp.get(0));
+					updateHIActivityReq.setActivity(updateHIApplicationReq.getActivity());
+					updateHIActivityReq.setComment(updateHIApplicationReq.getComment());
+					updateHIActivityReq.setStatus(updateHIApplicationReq.getStatus());
+					updateHIActivityReq.setActionTakenBy(updateHIApplicationReq.getSubmittedBy());
+					updateHIActivityReq.setActionTakenByPersonType(updateHIApplicationReq.getSubmittedByPersonType());
+
+					List<UpdateHIActivityResp> activityId = applicationListRepo.updateHIActivity(updateHIActivityReq); // NOSONAR
+
+				}
+				if (StringUtils.equalsIgnoreCase(updateHIApplicationReq.getIndicator(), "D")) {
+					if (updateResp.get(0) > 0) {
+						logger.info("Application deleted:{} ", updateResp.get(0));
+					}
+					commonResponse = new UpdateApplicationResp(true, Constant.getMessageMap().get(Constant.RHID_ADS),
+							utility.responseDate(LocalDateTime.now()));
+				} else {
+					commonResponse = new UpdateApplicationResp(true, Constant.getMessageMap().get(Constant.RHID_AUS),
+							utility.responseDate(LocalDateTime.now()));
+				}
+				logger.info("Record updated successfully for application");
+			} else {
+				commonResponse = new UpdateApplicationResp(false, Constant.getMessageMap().get(Constant.RHID_UUR),
+						utility.responseDate(LocalDateTime.now()));
+				logger.info("Unable to update HI Application Data.");
+			}
+
+			return commonResponse;
+
+		} catch (Exception e) {
+			logger.error("Exception occured while updating HI Application data:{}{} ", e.getMessage(), e);
+			throw new HomeInstructionException(e.getMessage(), Constant.DATABASE_ERROR_CODE);
+		}
+	}
+
+	@Override
+	public ApplicationTrackingResp updateApplicationTrackingData(
+			ApplicationTrackingRequest applicationTrackingRequest) {
+
+		try {
+
+			logger.debug("Request for Application Tracking. {}",
+					utility.printJson(applicationTrackingRequest) != null
+							? utility.printJson(applicationTrackingRequest)
+							: applicationTrackingRequest);
+
+			homeInstructionRepo.updateApplicationTrackingData(applicationTrackingRequest,
+					applicationTrackingRequest.getLoggedInUserId(),
+					applicationTrackingRequest.getLoggedInUserPersonType());
+
+			logger.info("Record submitted successfully for Application Tracking.");
+
+			return new ApplicationTrackingResp(true, Constant.getMessageMap().get(Constant.RHID_RUS),
+					utility.responseDate(LocalDateTime.now()));
+
+		} catch (Exception e) {
+
+			logger.error("Error occurred while updating Application TrackingData. {}{}", e.getMessage(), e);
+
+			throw new HomeInstructionException(e.getMessage(), "Internal Server Error", e);
+		}
+	}
+
+	@Override
+	public ApplicationTrackingResponseDTO getApplicationTrackingData(String applicationIds, String schoolYear,
+			String loggedInUser, String loggedInUserPersonType, String configKeys, String lookupValues) {
+
+		logger.debug("Parameter for getApplicationTrackingData application Ids: \n{}", applicationIds);
+
+		try {
+
+			List<LookupDetails> lookupTypeList = new ArrayList<>();
+			if (StringUtils.isNotBlank(lookupValues)) {
+				lookupTypeList = userDetailsRepo.getLookupValues(lookupValues);
+			}
+			Map<String, String> configKeyList = Collections.emptyMap();
+			if (StringUtils.isNotBlank(configKeys)) {
+				configKeyList = utility.getConfigList(configKeys);
+			}
+			List<GetApplicationTrackingResp> applicationTrackingDataResp = homeInstructionRepo
+					.getApplicationTrackingData(applicationIds, schoolYear, loggedInUser, loggedInUserPersonType);
+			ApplicationTrackingResponseDTO commonResponse = null;
+
+			if (!applicationTrackingDataResp.isEmpty()) {
+
+				commonResponse = new ApplicationTrackingResponseDTO(true,
+						Constant.getMessageMap().get(Constant.HSA_RFS), utility.responseDate(LocalDateTime.now()),
+						applicationTrackingDataResp, configKeyList, lookupTypeList);
+
+			} else {
+				logger.debug("data not found for application id {}", applicationIds);
+				commonResponse = new ApplicationTrackingResponseDTO(true,
+						Constant.getMessageMap().get(Constant.HSA_RNF), utility.responseDate(LocalDateTime.now()), null,
+						configKeyList, lookupTypeList);
+
+			}
+
+			return commonResponse;
+
+		} catch (Exception e) {
+			logger.error("Exception occured while calling getApplicationTrackingData data:{}{} ", e.getMessage(), e);
+			throw new HomeInstructionException(e.getMessage(), Constant.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	@Transactional
+	public HIActivityResponseDTO updateActivity(UpdateHIActivityReq hIActivityRequest) {
+		logger.debug("Request for updateActivity. {}",
+				utility.printJson(hIActivityRequest) != null ? utility.printJson(hIActivityRequest)
+						: hIActivityRequest);
+		try {
+			List<UpdateHIActivityResp> activityId = applicationListRepo.updateHIActivity(hIActivityRequest);
+			Long applicationId = hIActivityRequest.getApplicationId();
+			String loggedInUserPersonType = hIActivityRequest.getActionTakenByPersonType();
+			List<NotificationList> notificationList = homeInstructionRepo.getNotificationList(applicationId,
+					loggedInUserPersonType);
+			logger.debug("Action:{},application ID :{}",
+					Constant.getActivityMessages() != null
+							? Constant.getActivityMessages().get(hIActivityRequest.getActivity())
+							: "",
+					applicationId);
+			String message = Constant.getMessageMap().get(Constant.UHA_RUS);
+			switch (hIActivityRequest.getActivity()) { // NOSONAR
+			case "STDC":
+				message = Constant.getMessageMap().get(Constant.UHA_STDS);
+				break;
+			case "DCRQ":
+			case "RQBHI":
+				message = Constant.getMessageMap().get(Constant.UHA_QSS);
+				break;
+			case "CLBNP":
+				message = Constant.getMessageMap().get(Constant.UHA_CSDS);
+				break;
+			case "DCAP":
+				message = Constant.getMessageMap().get(Constant.UHA_DAA);
+				break;
+			case "STCN":
+				message = Constant.getMessageMap().get(Constant.UHA_STCS);
+				break;
+			case "STHI":
+				message = Constant.getMessageMap().get(Constant.UHA_SHIS);
+				break;
+			case "CLBNHI":
+				message = Constant.getMessageMap().get(Constant.UHA_CSHS);
+				break;
+			case "HIAPRV":
+				message = Constant.getMessageMap().get(Constant.UHA_SHAS);
+				break;
+			default:
+				break;
+			}
+
+			List<ApplicationInfoResp> appInfoData = null;
+			if (hIActivityRequest.isApplicationInfo()) {
+				appInfoData = homeInstructionRepo.getApplicationInfoData(applicationId,
+						hIActivityRequest.getActionTakenByPersonType());
+			}
+
+			if (activityId != null && !activityId.isEmpty()) {
+				return new HIActivityResponseDTO(true, message, utility.responseDate(LocalDateTime.now()),
+						notificationList, !CollectionUtils.isEmpty(appInfoData) ? appInfoData.get(0) : null);
+			} else {
+				return new HIActivityResponseDTO(false, Constant.getMessageMap().get(Constant.UHA_UUR),
+						utility.responseDate(LocalDateTime.now()), new ArrayList<>(), null);
+
+			}
+		} catch (Exception e) {
+			logger.error("Error occurred while updating activity {}{}", hIActivityRequest, e);
+			throw new HomeInstructionException(e.getMessage(), "Internal Server Error", e);
+		}
+
+	}
+
+	@Override
+	public AssignTeacherResponse updateAssignTeacher(UpdateAssignTeacherReq updateAssignTeacherReq) {
+		logger.debug("Request for updateActivity. {}",
+				utility.printJson(updateAssignTeacherReq) != null ? utility.printJson(updateAssignTeacherReq)
+						: updateAssignTeacherReq);
+		try {
+			if (!StringUtils.isEmpty(updateAssignTeacherReq.getEmployeeIds())) {
+
+				List<Long> updateAssignTeacherDataList = applicationListRepo
+						.updateAssignTeacher(updateAssignTeacherReq);
+
+				if (CollectionUtils.isEmpty(updateAssignTeacherDataList) || updateAssignTeacherDataList.get(0) <= 0) {
+
+					logger.info("Unable to update Assign Teacher.");
+
+					return new AssignTeacherResponse(false, Constant.getMessageMap().get(Constant.UAT_UTA),
+							utility.responseDate(LocalDateTime.now()));
+				}
+			}
+
+			UpdateHIActivityReq updateHIActivityReq = new UpdateHIActivityReq();
+
+			updateHIActivityReq.setApplicationId(updateAssignTeacherReq.getApplicationId());
+			updateHIActivityReq.setActivity(updateAssignTeacherReq.getActivity());
+			updateHIActivityReq.setStatus(updateAssignTeacherReq.getStatus());
+			updateHIActivityReq.setComment(updateAssignTeacherReq.getComment());
+			updateHIActivityReq.setActionTakenBy(updateAssignTeacherReq.getActionTakenBy());
+			updateHIActivityReq.setActionTakenByPersonType(updateAssignTeacherReq.getActionTakenByPersonType());
+
+			List<UpdateHIActivityResp> updateHIActivityResp = applicationListRepo.updateHIActivity(updateHIActivityReq); // NOSONAR
+			return new AssignTeacherResponse(true, Constant.getMessageMap().get(Constant.UAT_TAS),
+					utility.responseDate(LocalDateTime.now()));
+
+		} catch (Exception e) {
+
+			logger.error("Error while updating Assign Teacher.{}{}", e.getMessage(), e);
+
+			throw new HomeInstructionException(e.getMessage(), "Internal Server Error", e);
+		}
+	}
+}

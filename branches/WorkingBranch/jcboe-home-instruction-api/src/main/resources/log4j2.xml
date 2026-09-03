@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="INFO" monitorInterval="30">
+	<Properties>
+		<Property name="basePath">/opt/JCBOEHomeInstructionAPI</Property>
+	</Properties>
+
+	<Appenders>
+		<RollingFile name="fileLogger"
+			fileName="${basePath}/HomeInstruction_API.log"
+			filePattern="${basePath}/HomeInstruction_API_%d{yyyy-MM-dd}.log">
+			<PatternLayout>
+				<pattern>%d{ISO8601} %5p [%60c] : %M - %m%n
+				</pattern>
+			</PatternLayout>
+			<Policies>
+				<TimeBasedTriggeringPolicy interval="1"
+					modulate="true" />
+			</Policies>
+		</RollingFile>
+
+		<Console name="console" target="SYSTEM_OUT">
+			<PatternLayout pattern="%d{ISO8601} %5p [%60c] - %m%n" />
+		</Console>
+	</Appenders>
+
+	<Loggers>
+		<Logger name="com.jcboe" level="INFO" additivity="true">
+			<appender-ref ref="fileLogger" level="INFO" />
+		</Logger>
+		<Logger name="com.jcboe" level="DEBUG" additivity="true">
+			<appender-ref ref="fileLogger" level="INFO" />
+		</Logger>
+
+		<Root level="INFO" additivity="false">
+			<appender-ref ref="console" />
+		</Root>
+	</Loggers>
+</Configuration>

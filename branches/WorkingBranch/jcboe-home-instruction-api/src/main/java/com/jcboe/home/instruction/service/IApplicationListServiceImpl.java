@@ -1,0 +1,40 @@
+/*
+ * Copyright (C) YYYY-YYYY XXXXXXXXXXXXX
+ * mailto:AAAA@DDDD.COM
+ *
+ */
+package com.jcboe.home.instruction.service;
+
+import com.jcboe.home.instruction.model.request.ApplicationTrackingRequest;
+import com.jcboe.home.instruction.model.request.GetAppListReq;
+import com.jcboe.home.instruction.model.request.UpdateAssignTeacherReq;
+import com.jcboe.home.instruction.model.request.UpdateHIActivityReq;
+import com.jcboe.home.instruction.model.request.UpdateHIApplicationReq;
+import com.jcboe.home.instruction.response.ApplicationListResponseDTO;
+import com.jcboe.home.instruction.response.ApplicationTrackingResp;
+import com.jcboe.home.instruction.response.ApplicationTrackingResponseDTO;
+import com.jcboe.home.instruction.response.AssignTeacherResponse;
+import com.jcboe.home.instruction.response.GetApplicationInfoResp;
+import com.jcboe.home.instruction.response.HIActivityResponseDTO;
+import com.jcboe.home.instruction.response.UpdateApplicationResp;
+
+public interface IApplicationListServiceImpl {
+
+	ApplicationListResponseDTO getAppList(GetAppListReq getAppDetailsReq);
+
+	GetApplicationInfoResp getApplicationInfo(Long id, Long applicationId, Long formMasterId, String loggedInUserId,
+			String loggedInUserPersonType, String configKeys, String lookupValues, boolean isFormMaster,
+			boolean isPdfDetail, boolean isAttchment, boolean isNotification, boolean isStudent);
+
+	UpdateApplicationResp updateApplication(UpdateHIApplicationReq updateHIApplicationReq);
+
+	ApplicationTrackingResp updateApplicationTrackingData(ApplicationTrackingRequest applicationTrackingRequest);
+
+	ApplicationTrackingResponseDTO getApplicationTrackingData(String applicationIds, String schoolYear,
+			String loggedInUser, String loggedInUserPersonType, String configKeys, String lookupValues);
+
+	HIActivityResponseDTO updateActivity(UpdateHIActivityReq hIActivityRequest);
+
+	AssignTeacherResponse updateAssignTeacher(UpdateAssignTeacherReq updateAssignTeacherReq);
+
+}

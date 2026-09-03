@@ -1,0 +1,1150 @@
+/*
+ * Copyright (C) YYYY-YYYY XXXXXXXXXXXXX
+ * mailto:AAAA@DDDD.COM
+ *
+ */
+package com.jcboe.home.instruction.repo;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.stereotype.Repository;
+
+import com.jcboe.home.instruction.model.request.ApplicationTrackingRequest;
+import com.jcboe.home.instruction.model.request.Form10Request;
+import com.jcboe.home.instruction.model.request.Form1Request;
+import com.jcboe.home.instruction.model.request.Form2Request;
+import com.jcboe.home.instruction.model.request.Form3Request;
+import com.jcboe.home.instruction.model.request.Form4Request;
+import com.jcboe.home.instruction.model.request.Form630DHIRequest;
+import com.jcboe.home.instruction.model.request.Form760DHIRequest;
+import com.jcboe.home.instruction.model.request.Form8Request;
+import com.jcboe.home.instruction.model.request.Form9Request;
+import com.jcboe.home.instruction.response.ApplicationInfoResp;
+import com.jcboe.home.instruction.response.Form10HSAPPDataResp;
+import com.jcboe.home.instruction.response.Form1AphirDataResp;
+import com.jcboe.home.instruction.response.Form1AphirScheduleResp;
+import com.jcboe.home.instruction.response.Form2RHIDTDataResp;
+import com.jcboe.home.instruction.response.Form3RhiltDataResp;
+import com.jcboe.home.instruction.response.Form4PrthiDataResp;
+import com.jcboe.home.instruction.response.Form630DhiDataResp;
+import com.jcboe.home.instruction.response.Form760DhiDataResp;
+import com.jcboe.home.instruction.response.Form8HiscpDataResp;
+import com.jcboe.home.instruction.response.Form9EAPPDataResp;
+import com.jcboe.home.instruction.response.Form9EAPPPlanDataResp;
+import com.jcboe.home.instruction.response.GetApplicationTrackingResp;
+import com.jcboe.home.instruction.response.GetPhysicianInfoResp;
+import com.jcboe.home.instruction.response.HIFormMasterResp;
+import com.jcboe.home.instruction.response.HIFormTransactionResp;
+import com.jcboe.home.instruction.response.NotificationDetailsResp;
+import com.jcboe.home.instruction.response.NotificationList;
+import com.jcboe.home.instruction.utilities.AES;
+import com.jcboe.home.instruction.utilities.Constant;
+import com.jcboe.home.instruction.utilities.Utility;
+
+@Repository
+public class HomeInstructionRepo {
+
+	private final Logger logger = LogManager.getLogger(HomeInstructionRepo.class);
+
+	private NamedParameterJdbcTemplate jdbcTemplate;
+	private Utility utility;
+
+	@Autowired
+	public HomeInstructionRepo(final NamedParameterJdbcTemplate jdbcTemplate, Utility utility) {
+		this.jdbcTemplate = jdbcTemplate;
+		this.utility = utility;
+	}
+
+	public List<Long> updateForm1APHIRdata(Form1Request form1Request) throws Exception {
+		logger.debug("Calling db function fn_update_form1_aphir_data with parameter(s): -{}", form1Request);
+
+		final String query = "SELECT * FROM fn_update_form1_aphir_data(:p_indicator,:p_id,:p_hi_application_id,:p_hi_form_transaction_id"
+				+ ",:p_parent_name,:p_home_phone,:p_work_phone,:p_emergency_phone,:p_home_address,:p_email_address,:p_counselor_name,:p_counselor_phone,:p_nurse_name,:p_nurse_phone,:p_attendance_last_date"
+				+ ",:p_reason,:p_case_notification,:p_notification_date,:p_parent_signature,:p_parent_sign_date,:p_principal_signature,:p_principal_sign_date,:p_dir_spl_ed_signature,:p_dir_spl_ed_sign_date"
+				+ ",:p_dir_sup_signature,:p_dir_sup_sign_date,:p_dir_stu_life_service,:p_dir_stu_life_date,:p_is_approve,:p_approve_upto_date,:p_physician_signature,:p_physician_sign_date,:p_form1_aphir_schedule_xml_string,:p_logged_in_user)";
+
+		Map<String, Object> params = new HashMap<>();
+		params.put("p_indicator", form1Request.getIndicator());
+		params.put("p_id", form1Request.getForm1AphirDataId());
+		params.put("p_hi_application_id", form1Request.getApplicationId());
+		params.put("p_hi_form_transaction_id", 0);
+		params.put("p_parent_name", form1Request.getParentName());
+		params.put("p_home_phone", form1Request.getHomePhone());
+		params.put("p_work_phone", form1Request.getWorkPhone());
+		params.put("p_emergency_phone", form1Request.getEmergencyPhone());
+		params.put("p_home_address", form1Request.getHomeAddress());
+		params.put("p_email_address", form1Request.getEmailAddress());
+		params.put("p_counselor_name", form1Request.getCounselorName());
+		params.put("p_counselor_phone", form1Request.getCounselorPhone());
+		params.put("p_nurse_name", form1Request.getNurseName());
+		params.put("p_nurse_phone", form1Request.getNursePhone());
+		params.put("p_attendance_last_date", form1Request.getAttendanceLastDate());
+		params.put("p_reason", form1Request.getReason());
+		params.put("p_case_notification", form1Request.getCaseNotification());
+		params.put("p_notification_date", form1Request.getNotificationDate());
+		params.put("p_parent_signature", form1Request.getParentSignature());
+		params.put("p_parent_sign_date", form1Request.getParentSignDate());
+		params.put("p_principal_signature", form1Request.getPrincipalSignature());
+		params.put("p_principal_sign_date", form1Request.getPrincipalSignDate());
+		params.put("p_dir_spl_ed_signature", form1Request.getDirSpecialEdSignature());
+		params.put("p_dir_spl_ed_sign_date", form1Request.getDirSpecialEdSignDate());
+		params.put("p_dir_sup_signature", form1Request.getDirSupSignature());
+		params.put("p_dir_sup_sign_date", form1Request.getDirSupSignDate());
+		params.put("p_dir_stu_life_service", form1Request.getDirStudentLifeService());
+		params.put("p_dir_stu_life_date", form1Request.getDirStudentLifeDate());
+		params.put("p_is_approve", form1Request.getApproved());
+		params.put("p_approve_upto_date", form1Request.getApprovedUptoDate());
+		params.put("p_physician_signature", form1Request.getPhysicianSignature());
+		params.put("p_physician_sign_date", form1Request.getPhysicianSignDate());
+
+		try {
+			String updateForm1AphirSchedule = utility.stringToXmlFormat(form1Request.getForm1AphirScheduleData());
+
+			updateForm1AphirSchedule = updateForm1AphirSchedule.replace("ArrayList", "Form1AphirSchedules")
+					.replace("item", "Form1AphirSchedule");
+
+			logger.debug("p_form1_aphir_schedule_xml_string value: -{}", updateForm1AphirSchedule);
+
+			params.put("p_form1_aphir_schedule_xml_string", updateForm1AphirSchedule);
+
+			if (StringUtils.isEmpty(form1Request.getLoggedInUserId())) {
+				params.put("p_logged_in_user", 0);
+			} else {
+				params.put("p_logged_in_user", AES.decrypt(form1Request.getLoggedInUserId(), Constant.SALT_AES));
+			}
+
+			List<Long> conscentFormResp = jdbcTemplate.query(query, params, (rs, rowNum) -> Long.valueOf(
+
+					rs.getLong("tag_id")
+
+			));
+
+			logger.debug("Record updated successfully.");
+
+			return conscentFormResp;
+
+		} catch (Exception e) {
+			logger.error("Exception occured while calling database function fn_update_submitted_form_data: {} {}",
+					e.getMessage(), e);
+			throw new Exception(e);
+		}
+	}
+
+	public List<Form1AphirDataResp> getForm1AphirData(Long id, Long applicationId, String loggedInUserPersonType) {
+		try {
+			logger.debug("Calling db function fn_get_form1_aphir_data with id: {}, application ID: {}", id,
+					applicationId);
+
+			final String query = "SELECT * FROM fn_get_form1_aphir_data(:p_id,:p_application_id,:p_logged_in_user_person_type)";
+
+			Map<String, Object> params = new HashMap<>();
+
+			params.put("p_id", id);
+			params.put("p_application_id", applicationId);
+			params.put("p_logged_in_user_person_type", loggedInUserPersonType);
+
+			List<Form1AphirDataResp> response = jdbcTemplate.query(query, params,
+					(rs, rowNum) -> new Form1AphirDataResp(rs.getLong("id"), rs.getLong("hi_application_id"),
+							rs.getLong("hi_form_transaction_id"), rs.getString("application_type"),
+							rs.getString("application_type_abbrev"), rs.getString("application_status"),
+							rs.getString("application_status_abbrev"), rs.getString("request_date"),
+							rs.getLong("student_id"), rs.getString("student_name"), rs.getString("school_year"),
+							rs.getString("application_no"), rs.getString("student_dob"), rs.getString("student_gender"),
+							rs.getString("student_grade"), rs.getInt("student_grade_id"),
+							rs.getString("student_school"), rs.getString("student_school_code"),
+							rs.getString("classification"), rs.getString("parent_name"), rs.getString("home_phone"),
+							rs.getString("work_phone"), rs.getString("emergency_phone"), rs.getString("home_address"),
+							rs.getString("email_address"), rs.getString("counselor_name"),
+							rs.getString("counselor_phone"), rs.getString("nurse_name"), rs.getString("nurse_phone"),
+							rs.getString("attendance_last_date"), rs.getString("reason"),
+							rs.getString("case_notification"), rs.getString("notification_date"),
+							rs.getString("parent_signature"), rs.getString("parent_sign_date"),
+							rs.getString("principal_signature"), rs.getString("principal_sign_date"),
+							rs.getString("dir_spl_ed_signature"), rs.getString("dir_spl_ed_sign_date"),
+							rs.getString("dir_sup_signature"), rs.getString("dir_sup_sign_date"),
+							rs.getString("dir_stu_life_service"), rs.getString("dir_stu_life_date"),
+							(Boolean) rs.getObject("is_approve"), rs.getString("approve_upto_date"),
+							rs.getString("physician_signature"), rs.getString("physician_sign_date")));
+
+			logger.debug("Record Form1 Aphir fetched successfully.");
+
+			return response;
+
+		} catch (Exception e) {
+			logger.error("Error fetching fn_get_form1_aphir_data Form1 Aphir data: {}{}", e.getMessage(), e);
+			throw e;
+		}
+	}
+
+	public List<Form1AphirScheduleResp> getForm1AphirScheduleData(Long id) {
+		try {
+			logger.debug("Calling db function fn_get_form1_aphir_schedule with id: {}", id);
+
+			final String query = "SELECT * FROM fn_get_form1_aphir_schedule(:p_id)";
+
+			Map<String, Object> params = new HashMap<>();
+			params.put("p_id", id);
+
+			List<Form1AphirScheduleResp> response = jdbcTemplate.query(query, params,
+					(rs, rowNum) -> new Form1AphirScheduleResp(rs.getLong("id"), rs.getLong("form1_aphir_data_id"),
+							rs.getString("subject"), rs.getString("mp1"), rs.getString("mp2"), rs.getString("mp3"),
+							rs.getString("mp4"), rs.getString("schedule_type")));
+
+			logger.debug("Form1 APHIR Schedule records fetched successfully.");
+
+			return response;
+
+		} catch (Exception e) {
+			logger.error("Error fetching Form1 APHIR Schedule data: {}{}", e.getMessage(), e);
+			throw e;
+		}
+	}
+
+	public List<Form2RHIDTDataResp> getForm2RHIDTData(Long id, Long applicationId) {
+		try {
+			logger.debug("Calling db function fn_get_form2_rhidt_data with id: {} and application ID: {}", id,
+					applicationId);
+
+			final String query = "SELECT * FROM fn_get_form2_rhidt_data(:p_id,:p_application_id)";
+
+			Map<String, Object> params = new HashMap<>();
+
+			params.put("p_id", id);
+			params.put("p_application_id", applicationId);
+
+			List<Form2RHIDTDataResp> response = jdbcTemplate.query(query, params,
+					(rs, rowNum) -> new Form2RHIDTDataResp(rs.getLong("id"), rs.getLong("hi_application_id"),
+							rs.getLong("hi_form_transaction_id"), rs.getLong("student_id"),
+							rs.getString("student_name"), rs.getString("school_year"), rs.getString("application_no"),
+							rs.getString("student_dob"), rs.getString("student_gender"), rs.getString("student_grade"),
+							rs.getInt("student_grade_id"), rs.getString("student_school"),
+							rs.getString("student_school_code"), rs.getString("physician_review"),
+							rs.getString("hi_end_date"), rs.getString("nurse_signature"),
+							rs.getString("nurse_sign_date"), (Boolean) rs.getObject("is_agree"),
+							rs.getString("physician_signature"), rs.getString("physician_sign_date")));
+
+			logger.debug("Record Form2 RHIDT fetched successfully.");
+
+			return response;
+
+		} catch (Exception e) {
+			logger.error("Error fetching Form2 RHIDT data: {}{}", e.getMessage(), e);
+			throw e;
+		}
+	}
+
+	public List<Form3RhiltDataResp> getForm3RhiltData(Long id, Long applicationId) {
+		try {
+			logger.debug("Calling db function fn_get_form3_rhilt_data with id: {} and application ID: {}", id,
+					applicationId);
+
+			final String query = "SELECT * FROM fn_get_form3_rhilt_data(:p_id,:p_application_id)";
+
+			Map<String, Object> params = new HashMap<>();
+
+			params.put("p_id", id);
+			params.put("p_application_id", applicationId);
+
+			List<Form3RhiltDataResp> response = jdbcTemplate.query(query, params,
+					(rs, rowNum) -> new Form3RhiltDataResp(rs.getLong("id"), rs.getLong("hi_application_id"),
+							rs.getLong("hi_form_transaction_id"), rs.getLong("student_id"),
+							rs.getString("student_name"), rs.getString("school_year"), rs.getString("application_no"),
+							rs.getString("student_dob"), rs.getString("student_gender"), rs.getString("student_grade"),
+							rs.getInt("student_grade_id"), rs.getString("student_school"),
+							rs.getString("student_school_code"), rs.getString("injury_type"),
+							rs.getString("length_of_absence"), rs.getString("parent_signature"),
+							rs.getString("parent_sign_date"), rs.getString("received_by"),
+							rs.getString("nurse_signature"), rs.getString("nurse_sign_date"),
+							(Boolean) rs.getObject("is_application_given")));
+
+			logger.debug("Record Form3 Rhilt fetched successfully.");
+
+			return response;
+
+		} catch (Exception e) {
+			logger.error("Error while fetching Form3 Rhilt data: {}{}", e.getMessage(), e);
+			throw e;
+		}
+	}
+
+	public List<Form4PrthiDataResp> getForm4PrthiData(Long id, Long applicationId) {
+		try {
+			logger.debug("Calling db function fn_get_form4_prthi_data with id: {} and application ID: {}", id,
+					applicationId);
+
+			final String query = "SELECT * FROM fn_get_form4_prthi_data(:p_id,:p_application_id)";
+
+			Map<String, Object> params = new HashMap<>();
+
+			params.put("p_id", id);
+			params.put("p_application_id", applicationId);
+
+			List<Form4PrthiDataResp> response = jdbcTemplate.query(query, params,
+					(rs, rowNum) -> new Form4PrthiDataResp(rs.getLong("id"), rs.getLong("hi_application_id"),
+							rs.getLong("hi_form_transaction_id"), rs.getLong("student_id"),
+							rs.getString("student_name"), rs.getString("school_year"), rs.getString("application_no"),
+							rs.getString("student_dob"), rs.getString("student_gender"), rs.getString("student_grade"),
+							rs.getInt("student_grade_id"), rs.getString("student_school"),
+							rs.getString("student_school_code"), rs.getBoolean("is_teacher_accept"),
+							rs.getBoolean("is_teacher_recommend"), rs.getBoolean("is_teacher_certified"),
+							rs.getString("teacher_area_1"), rs.getString("teacher_area_2"),
+							rs.getString("teacher_area_3"), rs.getString("teacher_area_4"),
+							rs.getString("teacher_name"), rs.getString("teacher_school"),
+							rs.getString("teacher_home_phone"), rs.getString("teacher_work_phone"),
+							rs.getString("teacher_signature"), rs.getString("teacher_sign_date"),
+							rs.getString("principal_signature"), rs.getString("principal_sign_date")));
+
+			logger.debug("Record Form4Prthi fetched successfully.");
+
+			return response;
+
+		} catch (Exception e) {
+			logger.error("Error occured while fetching Form4 PRTHI data: {}{}", e.getMessage(), e);
+			throw e;
+		}
+	}
+
+	public List<Form630DhiDataResp> getForm630dhiData(Long id) {
+		try {
+			logger.debug("Calling db function fn_get_form6_30dhi_data with id: {}", id);
+
+			final String query = "SELECT * FROM fn_get_form6_30dhi_data(:p_id)";
+
+			Map<String, Object> params = new HashMap<>();
+
+			params.put("p_id", id);
+
+			List<Form630DhiDataResp> response = jdbcTemplate.query(query, params,
+					(rs, rowNum) -> new Form630DhiDataResp(rs.getLong("id"), rs.getLong("hi_application_id"),
+							rs.getLong("hi_form_transaction_id"), rs.getLong("student_id"),
+							rs.getString("student_name"), rs.getString("school_year"), rs.getString("application_no"),
+							rs.getString("student_dob"), rs.getString("student_gender"), rs.getString("student_grade"),
+							rs.getInt("student_grade_id"), rs.getString("student_school"),
+							rs.getString("student_school_code"), rs.getString("nurse_name"),
+							rs.getString("notice_date"), rs.getString("physician_name"),
+							rs.getString("physician_verified_on")));
+
+			logger.debug("Record Form6 30DHI fetched successfully.");
+
+			return response;
+
+		} catch (Exception e) {
+			logger.error("Error while fetching Form6 30DHI data: {}", e.getMessage(), e);
+			throw e;
+		}
+	}
+
+	public List<Form760DhiDataResp> getForm760DhiData(Long id) {
+		try {
+			logger.debug("Calling db function fn_get_form7_60dhi_data with id: {}", id);
+
+			final String query = "SELECT * FROM fn_get_form7_60dhi_data(:p_id)";
+
+			Map<String, Object> params = new HashMap<>();
+
+			params.put("p_id", id);
+
+			List<Form760DhiDataResp> response = jdbcTemplate.query(query, params,
+					(rs, rowNum) -> new Form760DhiDataResp(rs.getLong("id"), rs.getLong("hi_application_id"),
+							rs.getLong("hi_form_transaction_id"), rs.getLong("student_id"),
+							rs.getString("student_name"), rs.getString("school_year"), rs.getString("application_no"),
+							rs.getString("student_dob"), rs.getString("student_gender"), rs.getString("student_grade"),
+							rs.getInt("student_grade_id"), rs.getString("student_school"),
+							rs.getString("student_school_code"), rs.getString("nurse_name"),
+							rs.getString("notice_date"), rs.getString("physician_name"),
+							rs.getString("physician_verified_on")));
+
+			logger.debug("Record Form7 60DHI fetched successfully.");
+
+			return response;
+
+		} catch (Exception e) {
+			logger.error("Error while fetching Form7 60DHI data: {}{}", e.getMessage(), e);
+			throw e;
+		}
+	}
+
+	public List<Form8HiscpDataResp> getForm8HiscpData(Long id, Long applicationId) {
+		try {
+			logger.debug("Calling db function fn_get_form8_hiscp_data with id: {}", id);
+
+			final String query = "SELECT * FROM fn_get_form8_hiscp_data(:p_id,:p_application_id)";
+
+			Map<String, Object> params = new HashMap<>();
+
+			params.put("p_id", id);
+			params.put("p_application_id", applicationId);
+
+			List<Form8HiscpDataResp> response = jdbcTemplate.query(query, params,
+					(rs, rowNum) -> new Form8HiscpDataResp(rs.getLong("id"), rs.getLong("hi_application_id"),
+							rs.getLong("hi_form_transaction_id"), rs.getLong("student_id"),
+							rs.getString("student_name"), rs.getString("school_year"), rs.getString("application_no"),
+							rs.getString("student_dob"), rs.getString("student_gender"), rs.getString("student_grade"),
+							rs.getInt("student_grade_id"), rs.getString("student_school"),
+							rs.getString("student_school_code"), rs.getString("reason"),
+							rs.getString("medical_cutoff_date"), rs.getBoolean("is_physical_limitation"),
+							rs.getString("comments"), rs.getString("nurse_signature"), rs.getString("nurse_sign_date"),
+							rs.getString("program"), rs.getString("primary_language"),
+							rs.getString("last_present_date"), rs.getString("number_of_day_missing"),
+							rs.getString("hours_of_instruction"), rs.getString("academic_level"),
+							rs.getString("student_history"), rs.getString("counsellor_signature"),
+							rs.getString("counsellor_sign_date")));
+
+			logger.debug("Form 8 HISCP Record fetched successfully.");
+
+			return response;
+
+		} catch (Exception e) {
+			logger.error("Error while  Form8 HISCP data: {}{}", e.getMessage(), e);
+			throw e;
+		}
+	}
+
+	public List<Long> updateForm2RHIDTdata(Form2Request form2Request) throws Exception {
+		logger.debug("Calling db function fn_update_form2_rhidt_data with parameter(s): -{}", form2Request);
+
+		final String query = "SELECT * FROM fn_update_form2_rhidt_data(" + ":p_indicator," + ":p_id,"
+				+ ":p_hi_application_id," + ":p_hi_form_transaction_id," + ":p_physician_review," + ":p_hi_end_date,"
+				+ ":p_nurse_signature," + ":p_nurse_sign_date," + ":p_is_agree," + ":p_physician_signature,"
+				+ ":p_physician_sign_date,:p_logged_in_user)";
+
+		Map<String, Object> params = new HashMap<>();
+
+		params.put("p_indicator", form2Request.getIndicator());
+		params.put("p_id", form2Request.getId());
+		params.put("p_hi_application_id", form2Request.getApplicationId());
+		params.put("p_hi_form_transaction_id", 0);
+		params.put("p_physician_review", form2Request.getPhysicianReview());
+		params.put("p_hi_end_date", form2Request.getHiEndDate());
+		params.put("p_nurse_signature", form2Request.getNurseSignature());
+		params.put("p_nurse_sign_date", form2Request.getNurseSignDate());
+		params.put("p_is_agree", form2Request.getIsAgree());
+		params.put("p_physician_signature", form2Request.getPhysicianSignature());
+		params.put("p_physician_sign_date", form2Request.getPhysicianSignDate());
+		if (StringUtils.isEmpty(form2Request.getLoggedInUserId())) {
+			params.put("p_logged_in_user", 0);
+		} else {
+			params.put("p_logged_in_user", AES.decrypt(form2Request.getLoggedInUserId(), Constant.SALT_AES));
+		}
+		try {
+
+			List<Long> conscentFormResp = jdbcTemplate.query(query, params, (rs, rowNum) -> Long.valueOf(
+
+					rs.getLong("tag_id")
+
+			));
+
+			logger.debug("Form 2 RHIDT Record updated successfully.");
+
+			return conscentFormResp;
+
+		} catch (Exception e) {
+			logger.error("Exception occured while calling database function fn_update_form2_rhidt_data: {} {}",
+					e.getMessage(), e);
+			throw new Exception(e);
+		}
+	}
+
+	public List<HIFormTransactionResp> getHIFormTransactionData(long id, long applicationId, long formMasterId,
+			String userType) throws Exception {
+
+		logger.debug("Calling db function fn_get_hi_form_transaction with parameter(s):id  -{},applicationId :{}", id,
+				applicationId);
+
+		final String query = "SELECT * FROM fn_get_hi_form_transaction(:p_id,:p_application_id,:p_form_master_id,:p_user_type)";
+
+		Map<String, Object> params = new HashMap<>();
+		params.put("p_id", id);
+		params.put("p_application_id", applicationId);
+		params.put("p_form_master_id", formMasterId);
+		params.put("p_user_type", userType);
+
+		try {
+
+			List<HIFormTransactionResp> uploads = jdbcTemplate.query(query, params,
+					(rs, rowNum) -> new HIFormTransactionResp(rs.getLong("id"), rs.getLong("hi_application_id"),
+							rs.getLong("hi_activity_id"), rs.getLong("hi_form_master_id"), rs.getString("form_name"),
+							rs.getString("other_document_name"), rs.getString("uploaded_generated_tag"),
+							rs.getLong("data_record_id"), rs.getString("original_file_name"),
+							rs.getString("uploaded_file_name"), rs.getString("original_file_extn"),
+							rs.getDouble("original_file_size"), rs.getString("file_size"),
+							rs.getString("encrypted_file_guid"), rs.getString("file_storage_ind"),
+							rs.getLong("uploaded_by"), rs.getString("uploaded_on"),
+							rs.getString("uploaded_by_person_type")));
+
+			logger.debug("Record fetched successfully for hi transaction data.");
+
+			return uploads;
+
+		} catch (Exception e) {
+			logger.error("Exception occured while calling database function fn_get_hi_form_transaction: {} {}",
+					e.getMessage(), e);
+			throw new Exception(e);
+		}
+	}
+
+	public List<Long> updateForm3RHILTdata(Form3Request form3Request) throws Exception {
+		logger.debug("Calling db function fn_update_form3_rhilt_data with parameter(s): -{}", form3Request);
+
+		final String query = "SELECT * FROM fn_update_form3_rhilt_data(" + ":p_indicator,:p_id,"
+				+ ":p_hi_application_id," + ":p_hi_form_transaction_id,:p_injury_type,:p_length_of_absence,"
+				+ ":p_parent_signature,:p_parent_sign_date,:p_received_by,:p_nurse_signature,"
+				+ ":p_nurse_sign_date,:p_is_application_given,:p_logged_in_user)";
+
+		Map<String, Object> params = new HashMap<>();
+
+		params.put("p_indicator", form3Request.getIndicator());
+		params.put("p_id", form3Request.getId());
+		params.put("p_hi_application_id", form3Request.getApplicationId());
+		params.put("p_hi_form_transaction_id", 0);
+		params.put("p_injury_type", form3Request.getInjuryType());
+		params.put("p_length_of_absence", form3Request.getLengthOfAbsence());
+		params.put("p_parent_signature", form3Request.getParentSignature());
+		params.put("p_parent_sign_date", form3Request.getParentSignDate());
+		params.put("p_received_by", form3Request.getReceivedBy());
+		params.put("p_nurse_signature", form3Request.getNurseSignature());
+		params.put("p_nurse_sign_date", form3Request.getNurseSignDate());
+		params.put("p_is_application_given", form3Request.getIsApplicationGiven());
+		if (StringUtils.isEmpty(form3Request.getLoggedInUserId())) {
+			params.put("p_logged_in_user", 0);
+		} else {
+			params.put("p_logged_in_user", AES.decrypt(form3Request.getLoggedInUserId(), Constant.SALT_AES));
+		}
+		try {
+
+			List<Long> form3Resp = jdbcTemplate.query(query, params, (rs, rowNum) -> rs.getLong("tag_id"));
+
+			logger.debug("Record for form RHILT updated successfully.");
+
+			return form3Resp;
+
+		} catch (Exception e) {
+			logger.error("Exception occurred while calling database function fn_update_form3_rhilt_data: {} {}",
+					e.getMessage(), e);
+			throw new Exception(e);
+		}
+	}
+
+	public List<Long> updateForm10HSAPPdata(Form10Request form10Request) throws Exception {
+		logger.debug("Calling db function fn_update_form10_hsapp_data with parameter(s): -{}", form10Request);
+
+		final String query = "SELECT * FROM fn_update_form10_hsapp_data(" + ":p_indicator," + ":p_id,"
+				+ ":p_hi_application_id," + ":p_hi_form_transaction_id," + ":p_subject," + ":p_grade_in_progress,"
+				+ ":p_teacher_name," + ":p_teacher_email," + ":p_is_additional_time_needed," + ":p_unit_of_study,"
+				+ ":p_assignments,:p_independent_work,:p_assessments,:p_standards_covered,:p_other_resources,:p_teacher_signature,:p_teacher_sign_date,:p_logged_in_user)";
+
+		Map<String, Object> params = new HashMap<>();
+
+		params.put("p_indicator", form10Request.getIndicator());
+		params.put("p_id", form10Request.getId());
+		params.put("p_hi_application_id", form10Request.getApplicationId());
+		params.put("p_hi_form_transaction_id", 0);
+		params.put("p_subject", form10Request.getSubject());
+		params.put("p_grade_in_progress", form10Request.getGradeInProgress());
+		params.put("p_teacher_name", form10Request.getTeacherName());
+		params.put("p_teacher_email", form10Request.getTeacherEmail());
+		params.put("p_is_additional_time_needed", form10Request.getIsAdditionalTimeNeeded());
+		params.put("p_unit_of_study", form10Request.getUnitOfStudy());
+		params.put("p_assignments", form10Request.getAssignments());
+		params.put("p_independent_work", form10Request.getIndependentWork());
+		params.put("p_assessments", form10Request.getAssessments());
+		params.put("p_standards_covered", form10Request.getStandardsCovered());
+		params.put("p_other_resources", form10Request.getOtherResources());
+		params.put("p_teacher_signature", form10Request.getTeacherSignature());
+		params.put("p_teacher_sign_date", form10Request.getTeacherSignDate());
+		if (StringUtils.isEmpty(form10Request.getLoggedInUserId())) {
+			params.put("p_logged_in_user", 0);
+		} else {
+			params.put("p_logged_in_user", AES.decrypt(form10Request.getLoggedInUserId(), Constant.SALT_AES));
+		}
+		try {
+
+			List<Long> conscentFormResp = jdbcTemplate.query(query, params, (rs, rowNum) -> Long.valueOf(
+
+					rs.getLong("tag_id")
+
+			));
+
+			logger.debug("Record HISCP updated successfully.");
+
+			return conscentFormResp;
+
+		} catch (Exception e) {
+			logger.error("Exception occured while calling database function fn_update_form10_hsapp_data: {} {}",
+					e.getMessage(), e);
+			throw new Exception(e);
+		}
+	}
+
+	public List<Form10HSAPPDataResp> getForm10HSAPPData(Long id, Long applicationId) {
+		try {
+			logger.debug("Calling db function fn_get_form10_hsapp_data with id: {}, applicationId: {}", id,
+					applicationId);
+
+			final String query = "SELECT * FROM fn_get_form10_hsapp_data(:p_id,:p_application_id)";
+
+			Map<String, Object> params = new HashMap<>();
+
+			params.put("p_id", id);
+			params.put("p_application_id", applicationId);
+
+			List<Form10HSAPPDataResp> response = jdbcTemplate.query(query, params,
+					(rs, rowNum) -> new Form10HSAPPDataResp(rs.getLong("id"), rs.getLong("hi_application_id"),
+							rs.getLong("hi_form_transaction_id"), rs.getLong("student_id"),
+							rs.getString("student_name"), rs.getString("school_year"), rs.getString("application_no"),
+							rs.getString("student_dob"), rs.getString("student_gender"), rs.getString("student_grade"),
+							rs.getString("student_grade_id"), rs.getString("student_school"),
+							rs.getString("student_school_code"), rs.getString("subject"),
+							rs.getString("grade_in_progress"), rs.getString("teacher_name"),
+							rs.getString("teacher_email"), rs.getBoolean("is_additional_time_needed"),
+							rs.getString("unit_of_study"), rs.getString("assignments"),
+							rs.getString("independent_work"), rs.getString("assessments"),
+							rs.getString("standards_covered"), rs.getString("other_resources"),
+							rs.getString("teacher_signature"), rs.getString("teacher_sign_date")));
+
+			logger.debug("Record HISCP fetched successfully.");
+
+			return response;
+
+		} catch (Exception e) {
+			logger.error("Error fetching Form10 HSAPP data: {}{}", e.getMessage(), e);
+			throw e;
+		}
+	}
+
+	public List<Long> updateForm4PRTHIdata(Form4Request form4Request) throws Exception {
+
+		logger.debug("Calling db function fn_update_form4_prthi_data with parameter(s): -{}", form4Request);
+
+		final String query = "SELECT * FROM fn_update_form4_prthi_data(" + ":p_indicator,:p_id,"
+				+ ":p_hi_application_id," + ":p_hi_form_transaction_id," + ":p_is_teacher_accept,"
+				+ ":p_is_teacher_recommend," + ":p_is_teacher_certified," + ":p_teacher_area_1," + ":p_teacher_area_2,"
+				+ ":p_teacher_area_3," + ":p_teacher_area_4," + ":p_teacher_name," + ":p_teacher_school,"
+				+ ":p_teacher_home_phone," + ":p_teacher_work_phone," + ":p_teacher_signature,"
+				+ ":p_teacher_sign_date," + ":p_principal_signature," + ":p_principal_sign_date,"
+				+ ":p_logged_in_user)";
+
+		Map<String, Object> params = new HashMap<>();
+
+		params.put("p_indicator", form4Request.getIndicator());
+		params.put("p_id", form4Request.getId());
+		params.put("p_hi_application_id", form4Request.getApplicationId());
+		params.put("p_hi_form_transaction_id", 0);
+		params.put("p_is_teacher_accept", form4Request.getIsTeacherAccept());
+		params.put("p_is_teacher_recommend", form4Request.getIsTeacherRecommend());
+		params.put("p_is_teacher_certified", form4Request.getIsTeacherCertified());
+		params.put("p_teacher_area_1", form4Request.getTeacherArea1());
+		params.put("p_teacher_area_2", form4Request.getTeacherArea2());
+		params.put("p_teacher_area_3", form4Request.getTeacherArea3());
+		params.put("p_teacher_area_4", form4Request.getTeacherArea4());
+		params.put("p_teacher_name", form4Request.getTeacherName());
+		params.put("p_teacher_school", form4Request.getTeacherSchool());
+		params.put("p_teacher_home_phone", form4Request.getTeacherHomePhone());
+		params.put("p_teacher_work_phone", form4Request.getTeacherWorkPhone());
+		params.put("p_teacher_signature", form4Request.getTeacherSignature());
+		params.put("p_teacher_sign_date", form4Request.getTeacherSignDate());
+		params.put("p_principal_signature", form4Request.getPrincipalSignature());
+		params.put("p_principal_sign_date", form4Request.getPrincipalSignDate());
+		if (StringUtils.isEmpty(form4Request.getLoggedInUserId())) {
+			params.put("p_logged_in_user", 0);
+		} else {
+			params.put("p_logged_in_user", AES.decrypt(form4Request.getLoggedInUserId(), Constant.SALT_AES));
+		}
+
+		try {
+
+			List<Long> form4Resp = jdbcTemplate.query(query, params, (rs, rowNum) -> rs.getLong("tag_id"));
+
+			logger.debug("Record PRTHI updated successfully.");
+
+			return form4Resp;
+
+		} catch (Exception e) {
+
+			logger.error("Exception occurred while calling database function fn_update_form4_prthi_data: {} {}",
+					e.getMessage(), e);
+
+			throw new Exception(e);
+		}
+	}
+
+	public List<Long> updateForm8HISCPdata(Form8Request form8Request) throws Exception {
+
+		logger.debug("Calling db function fn_update_form8_hiscp_data with parameter(s): -{}", form8Request);
+
+		final String query = "SELECT * FROM fn_update_form8_hiscp_data(" + ":p_indicator," + ":p_id,"
+				+ ":p_hi_application_id," + ":p_hi_form_transaction_id," + ":p_reason," + ":p_medical_cutoff_date,"
+				+ ":p_is_physical_limitation," + ":p_comments," + ":p_nurse_signature," + ":p_nurse_sign_date,"
+				+ ":p_program," + ":p_primary_language," + ":p_last_present_date," + ":p_number_of_day_missing,"
+				+ ":p_hours_of_instruction," + ":p_academic_level," + ":p_student_history," + ":p_counsellor_signature,"
+				+ ":p_counsellor_sign_date,:p_logged_in_user)";
+
+		Map<String, Object> params = new HashMap<>();
+
+		params.put("p_indicator", form8Request.getIndicator());
+		params.put("p_id", form8Request.getId());
+		params.put("p_hi_application_id", form8Request.getApplicationId());
+		params.put("p_hi_form_transaction_id", 0);
+		params.put("p_reason", form8Request.getReason());
+		params.put("p_medical_cutoff_date", form8Request.getMedicalCutoffDate());
+		params.put("p_is_physical_limitation", form8Request.getIsPhysicalLimitation());
+		params.put("p_comments", form8Request.getNurseComment());
+		params.put("p_nurse_signature", form8Request.getNurseSignature());
+		params.put("p_nurse_sign_date", form8Request.getNurseSignDate());
+		params.put("p_program", form8Request.getProgram());
+		params.put("p_primary_language", form8Request.getPrimaryLanguage());
+		params.put("p_last_present_date", form8Request.getLastPresentDate());
+		params.put("p_number_of_day_missing", form8Request.getNumberOfDayMissing());
+		params.put("p_hours_of_instruction", form8Request.getHoursOfInstruction());
+		params.put("p_academic_level", form8Request.getAcademicLevel());
+		params.put("p_student_history", form8Request.getStudentHistory());
+		params.put("p_counsellor_signature", form8Request.getCounsellorSignature());
+		params.put("p_counsellor_sign_date", form8Request.getCounsellorSignDate());
+		if (StringUtils.isEmpty(form8Request.getLoggedInUserId())) {
+			params.put("p_logged_in_user", 0);
+		} else {
+			params.put("p_logged_in_user", AES.decrypt(form8Request.getLoggedInUserId(), Constant.SALT_AES));
+		}
+		try {
+
+			List<Long> form8Resp = jdbcTemplate.query(query, params, (rs, rowNum) -> rs.getLong("tag_id"));
+
+			logger.debug("Record updated successfully for form 8 HISCP.");
+
+			return form8Resp;
+
+		} catch (Exception e) {
+
+			logger.error("Exception occurred while calling database function fn_update_form8_hiscp_data: {} {}",
+					e.getMessage(), e);
+
+			throw new Exception(e);
+		}
+	}
+
+	public List<Form9EAPPDataResp> getForm9EAPPData(Long id, Long applicationId) {
+		try {
+			logger.debug("Calling db function fn_get_form9_eapp_data with id: {}, applicationId: {}", id,
+					applicationId);
+
+			final String query = "SELECT * FROM fn_get_form9_eapp_data(:p_id,:p_application_id)";
+
+			Map<String, Object> params = new HashMap<>();
+
+			params.put("p_id", id);
+			params.put("p_application_id", applicationId);
+
+			List<Form9EAPPDataResp> response = jdbcTemplate.query(query, params,
+					(rs, rowNum) -> new Form9EAPPDataResp(rs.getLong("id"), rs.getLong("hi_application_id"),
+							rs.getLong("hi_form_transaction_id"), rs.getLong("student_id"),
+							rs.getString("student_name"), rs.getString("school_year"), rs.getString("application_no"),
+							rs.getString("student_dob"), rs.getString("student_gender"), rs.getString("student_grade"),
+							rs.getString("student_grade_id"), rs.getString("student_school"),
+							rs.getString("student_school_code"), rs.getString("teacher_name"),
+							rs.getString("teacher_email"), rs.getString("teacher_signature"),
+							rs.getString("teacher_sign_date"), getForm9EAPPPlanData(rs.getLong("id"))));
+
+			logger.debug("Record Form9 EAPP fetched successfully.");
+
+			return response;
+
+		} catch (Exception e) {
+			logger.error("Error fetching Form9 EAPP data: {}", e.getMessage(), e);
+			throw e;
+		}
+	}
+
+	public List<Form9EAPPPlanDataResp> getForm9EAPPPlanData(Long id) {
+		try {
+			logger.debug("Calling db function fn_get_form9_eapp_plan with id: {}", id);
+
+			final String query = "SELECT * FROM fn_get_form9_eapp_plan(:p_form9_eapp_plan_id)";
+
+			Map<String, Object> params = new HashMap<>();
+
+			params.put("p_form9_eapp_plan_id", id);
+
+			List<Form9EAPPPlanDataResp> response = jdbcTemplate.query(query, params,
+					(rs, rowNum) -> new Form9EAPPPlanDataResp(rs.getLong("id"), rs.getLong("form9_eapp_data_id"),
+							rs.getString("plan_type"), rs.getString("plan_1"), rs.getString("plan_2")));
+
+			logger.debug("Record Form9 EAPPP fetched successfully.");
+
+			return response;
+
+		} catch (Exception e) {
+			logger.error("Error fetching Form9 EAPP Plan data: {}", e.getMessage(), e);
+			throw e;
+		}
+	}
+
+	public List<Long> updateForm9EAPPData(Form9Request form9ERequest) throws Exception {
+
+		logger.debug("Calling db function fn_update_form9_eapp_data with parameter(s): -{}", form9ERequest);
+
+		final String query = "SELECT * FROM fn_update_form9_eapp_data(" + ":p_indicator," + ":p_id,"
+				+ ":p_hi_application_id," + ":p_hi_form_transaction_id," + ":p_teacher_name," + ":p_teacher_email,"
+				+ ":p_teacher_signature," + ":p_teacher_sign_date,"
+				+ ":p_form9_eapp_plan_xml_string,:p_logged_in_user)";
+
+		Map<String, Object> params = new HashMap<>();
+
+		params.put("p_indicator", form9ERequest.getIndicator());
+		params.put("p_id", form9ERequest.getId());
+		params.put("p_hi_application_id", form9ERequest.getApplicationId());
+		params.put("p_hi_form_transaction_id", 0);
+		params.put("p_teacher_name", form9ERequest.getTeacherName());
+		params.put("p_teacher_email", form9ERequest.getTeacherEmail());
+		params.put("p_teacher_signature", form9ERequest.getTeacherSignature());
+		params.put("p_teacher_sign_date", form9ERequest.getTeacherSignDate());
+		if (StringUtils.isEmpty(form9ERequest.getLoggedInUserId())) {
+			params.put("p_logged_in_user", 0);
+		} else {
+			params.put("p_logged_in_user", AES.decrypt(form9ERequest.getLoggedInUserId(), Constant.SALT_AES));
+		}
+		try {
+			String updateForm9EappPlanData = utility.stringToXmlFormat(form9ERequest.getForm9EappPlanData());
+
+			updateForm9EappPlanData = updateForm9EappPlanData.replace("ArrayList", "Form9EappPlans").replace("item",
+					"Form9EappPlan");
+
+			params.put("p_form9_eapp_plan_xml_string", updateForm9EappPlanData);
+
+			List<Long> response = jdbcTemplate.query(query, params, (rs, rowNum) -> rs.getLong("tag_id"));
+
+			logger.debug("Record Form9 EAPPP updated successfully.");
+
+			return response;
+
+		} catch (Exception e) {
+
+			logger.error("Exception occurred while calling database function fn_update_form9_eapp_data: {} {}",
+					e.getMessage(), e);
+
+			throw e;
+		}
+	}
+
+	public List<Long> updateForm30DHIdata(Form630DHIRequest form630DHIRequest, List<GetPhysicianInfoResp> physcData)
+			throws Exception {
+
+		logger.debug("Calling db function fn_update_form6_30dhi_data with parameter(s): -{}", form630DHIRequest);
+
+		final String query = "SELECT * FROM fn_update_form6_30dhi_data(:p_indicator,:p_id,:p_hi_application_id,:p_hi_form_transaction_id,:p_nurse_name,:p_notice_date,:p_physician_name,:p_physician_verified_on,:p_logged_in_user)";
+
+		Map<String, Object> params = new HashMap<>();
+
+		params.put("p_indicator", form630DHIRequest.getIndicator());
+		params.put("p_id", form630DHIRequest.getId());
+		params.put("p_hi_application_id", form630DHIRequest.getApplicationId());
+		params.put("p_hi_form_transaction_id", 0);
+		params.put("p_nurse_name", form630DHIRequest.getNurseName());
+		params.put("p_notice_date", form630DHIRequest.getNoticeDate());
+		params.put("p_physician_name", physcData.get(0).getPhysicianName());
+		params.put("p_physician_verified_on", physcData.get(0).getPhysicianSignDate());
+		if (StringUtils.isEmpty(form630DHIRequest.getLoggedInUserId())) {
+			params.put("p_logged_in_user", 0);
+		} else {
+			params.put("p_logged_in_user", AES.decrypt(form630DHIRequest.getLoggedInUserId(), Constant.SALT_AES));
+		}
+
+		try {
+
+			List<Long> form4Resp = jdbcTemplate.query(query, params, (rs, rowNum) -> rs.getLong("tag_id"));
+
+			logger.debug("Record Form6 30DHI updated successfully.");
+
+			return form4Resp;
+
+		} catch (Exception e) {
+
+			logger.error("Exception occurred while calling database function fn_update_form6_30dhi_data: {} {}",
+					e.getMessage(), e);
+
+			throw new Exception(e);
+		}
+	}
+
+	public List<Long> updateForm760DHIdata(Form760DHIRequest form760DHIRequest, GetPhysicianInfoResp physcData)
+			throws Exception {
+
+		logger.debug("Calling db function fn_update_form7_60dhi_data with parameter(s): -{}", form760DHIRequest);
+
+		final String query = "SELECT * FROM fn_update_form7_60dhi_data(:p_indicator,:p_id,:p_hi_application_id,:P_hi_form_transaction_id,:p_nurse_name,:p_notice_date,:p_physician_name,:p_physician_verified_on,:p_logged_in_user)";
+
+		Map<String, Object> params = new HashMap<>();
+
+		params.put("p_indicator", form760DHIRequest.getIndicator());
+		params.put("p_id", form760DHIRequest.getId());
+		params.put("p_hi_application_id", form760DHIRequest.getApplicationId());
+		params.put("P_hi_form_transaction_id", 0);
+		params.put("p_nurse_name", form760DHIRequest.getNurseName());
+		params.put("p_notice_date", form760DHIRequest.getNoticeDate());
+		params.put("p_physician_name", physcData.getPhysicianName());
+		params.put("p_physician_verified_on", physcData.getPhysicianSignDate());
+		if (StringUtils.isEmpty(form760DHIRequest.getLoggedInUserId())) {
+			params.put("p_logged_in_user", 0);
+		} else {
+			params.put("p_logged_in_user", AES.decrypt(form760DHIRequest.getLoggedInUserId(), Constant.SALT_AES));
+		}
+
+		try {
+
+			List<Long> form7Resp = jdbcTemplate.query(query, params, (rs, rowNum) -> rs.getLong("tag_id"));
+
+			logger.debug("Record form 7 60DHI updated successfully.");
+
+			return form7Resp;
+
+		} catch (Exception e) {
+
+			logger.error("Exception occurred while calling database function fn_update_form7_60dhi_data : {} {}",
+					e.getMessage(), e);
+
+			throw new Exception(e);
+		}
+	}
+
+	public List<HIFormMasterResp> getHIFormMasterData(String userType) throws Exception {
+
+		logger.debug("Calling db function fn_get_hi_form_master_list with parameter(s):userType  -{}", userType);
+
+		final String query = "SELECT * FROM fn_get_hi_form_master_list(:p_user_type)";
+
+		Map<String, Object> params = new HashMap<>();
+		params.put("p_user_type", userType);
+
+		try {
+
+			List<HIFormMasterResp> formMasterData = jdbcTemplate.query(query, params,
+					(rs, rowNum) -> new HIFormMasterResp(rs.getLong("id"), rs.getString("form_abbreviation"),
+							rs.getString("form_short_name"), rs.getString("form_name"), rs.getString("pdf_name"),
+							rs.getString("special_type"), rs.getBoolean("is_active")));
+
+			logger.debug("Record fetched successfully for HI form master data.");
+
+			return formMasterData;
+
+		} catch (Exception e) {
+			logger.error("Exception occured while calling database function fn_get_hi_form_master_list: {} {}",
+					e.getMessage(), e);
+			throw new Exception(e);
+		}
+	}
+
+	public List<ApplicationInfoResp> getApplicationInfoData(Long applicationId, String personType) throws Exception {
+
+		logger.debug("Calling db function fn_get_application_info with parameter(s):applicationId  -{}", applicationId);
+
+		final String query = "SELECT * FROM fn_get_application_info(:p_application_id,:p_logged_in_user_person_type)";
+
+		Map<String, Object> params = new HashMap<>();
+		params.put("p_application_id", applicationId);
+		params.put("p_logged_in_user_person_type", personType);
+
+		try {
+
+			List<ApplicationInfoResp> appInfoData = jdbcTemplate.query(query, params,
+					(rs, rowNum) -> new ApplicationInfoResp(rs.getLong("hi_application_id"),
+							rs.getString("application_type"), rs.getString("application_type_abbrev"),
+							rs.getString("application_status"), rs.getString("application_status_abbrev"),
+							rs.getString("request_date"), rs.getString("classification"), rs.getLong("student_id"),
+							rs.getString("student_name"), rs.getString("school_year"), rs.getString("application_no"),
+							rs.getString("student_dob"), rs.getString("student_gender"), rs.getString("student_grade"),
+							rs.getInt("student_grade_id"), rs.getString("student_school"),
+							rs.getString("student_school_code"), rs.getString("teacher_ids"),
+							rs.getString("hi_approver_comment"), (Boolean) rs.getObject("is_hi_approved")));
+
+			logger.debug("Application info record fetched successfully.");
+
+			return appInfoData;
+
+		} catch (Exception e) {
+			logger.error("Exception occured while calling database function fn_get_application_info: {} {}",
+					e.getMessage(), e);
+			throw new Exception(e);
+		}
+	}
+
+	public List<NotificationList> getNotificationList(Long applicationId, String userType) throws Exception {
+
+		logger.debug(
+				"Calling db function fn_get_notification_list with parameter(s): applicationId - {}, userType - {}",
+				applicationId, userType);
+
+		final String query = "SELECT * FROM fn_get_notification_list(:p_application_id,"
+				+ ":p_logged_in_user_person_type)";
+
+		Map<String, Object> params = new HashMap<>();
+		params.put("p_application_id", applicationId);
+		params.put("p_logged_in_user_person_type", userType);
+
+		try {
+
+			List<NotificationList> notificationList = jdbcTemplate.query(query, params, (rs, rowNum) -> {
+
+				NotificationList resp = new NotificationList();
+
+				resp.setId(rs.getLong("id"));
+				resp.setTitle(rs.getString("title"));
+				resp.setRespondActivity(rs.getString("respond_activity"));
+
+				List<NotificationDetailsResp> notificationDetails = getNotificationDetails(applicationId, resp.getId(),
+						userType);
+
+				if (notificationDetails != null) {
+					resp.setNotificationDetails(notificationDetails);
+				}
+
+				return resp;
+			});
+
+			logger.debug("Notification record(s) fetched successfully: {}", notificationList.size());
+
+			return notificationList;
+
+		} catch (Exception e) {
+			logger.error("Exception occured while calling database function fn_get_notification_list: {} {}",
+					e.getMessage(), e);
+			throw new Exception(e);
+		}
+	}
+
+	public List<NotificationDetailsResp> getNotificationDetails(long applicationId, long id, String userType) {
+		try {
+			logger.debug("Calling db function fn_get_notification_details with applicationId: {}", applicationId);
+
+			final String answerQuery = "SELECT * FROM fn_get_notification_details(:p_id,:p_hi_application_id,:p_logged_in_user_person_type)";
+
+			Map<String, Object> params = new HashMap<>();
+			params.put("p_id", id);
+			params.put("p_hi_application_id", applicationId);
+			params.put("p_logged_in_user_person_type", userType);
+			List<NotificationDetailsResp> notificationDetailsList = jdbcTemplate.query(answerQuery, params,
+					(rs, rowNum) -> {
+						NotificationDetailsResp q = new NotificationDetailsResp();
+						q.setRequestedOn(rs.getString("request_on"));
+						q.setComment(rs.getString("comment"));
+						q.setRequestedBy(rs.getLong("request_by"));
+						q.setRequestedByName(rs.getString("request_by_name"));
+						q.setActivity(rs.getString("activity"));
+						return q;
+					});
+
+			logger.debug("Notification details record(s) found: {}", notificationDetailsList.size());
+			return notificationDetailsList;
+		} catch (Exception e) {
+			logger.error(
+					"Error fetching notification details for notificationId {}, by calling function fn_get_notification_details: {}",
+					id, e.getMessage());
+			throw e;
+		}
+	}
+
+	public void updateApplicationTrackingData(ApplicationTrackingRequest applicationTrackingRequest,
+			String loggedInuserId, String loggedInUserPersonType) throws Exception {
+
+		logger.debug("Calling db function fn_update_application_tracking with parameter(s): -{}",
+				applicationTrackingRequest);
+
+		final String query = "SELECT fn_update_application_tracking(" + ":p_application_tracking_xml_string,"
+				+ ":p_logged_in_user," + ":p_logged_in_user_person_type)";
+
+		Map<String, Object> params = new HashMap<>();
+
+		try {
+			String updateApplicationTracking = utility
+					.stringToXmlFormat(applicationTrackingRequest.getApplicationTrackingDataList());
+
+			updateApplicationTracking = updateApplicationTracking.replace("ArrayList", "ApplicationTrackingData")
+					.replace("item", "ApplicationTracking");
+			logger.debug("update Application Tracking xml data: {}", updateApplicationTracking);
+			params.put("p_application_tracking_xml_string", updateApplicationTracking);
+			if (StringUtils.isNotEmpty(loggedInuserId)) {
+				params.put("p_logged_in_user", AES.decrypt(loggedInuserId, Constant.SALT_AES));
+			} else {
+				params.put("p_logged_in_user", 0);
+			}
+			params.put("p_logged_in_user_person_type", loggedInUserPersonType);
+
+			jdbcTemplate.queryForObject(query, params, (rs, rowNum) -> {
+				rs.getObject(1);
+				return null;
+			});
+		} catch (Exception e) {
+			logger.error("Exception occurred while calling database function fn_update_application_tracking: {} {}",
+					e.getMessage(), e);
+			throw new Exception(e);
+		}
+	}
+
+	public List<GetApplicationTrackingResp> getApplicationTrackingData(String applicationIds, String schoolYear,
+			String loggedInUserId, String loggedInUserPersonType) {
+		try {
+			logger.debug("Calling db function fn_get_application_tracking_list with id: {},schoolYear:{}",
+					applicationIds, schoolYear);
+
+			final String query = "SELECT * FROM fn_get_application_tracking_list(:p_application_id,:p_school_year,:p_logged_in_user,:p_logged_in_user_person_type)";
+
+			Map<String, Object> params = new HashMap<>();
+
+			params.put("p_application_id", applicationIds);
+			params.put("p_school_year", schoolYear);
+			if (StringUtils.isNotEmpty(loggedInUserId)) {
+				params.put("p_logged_in_user", AES.decrypt(loggedInUserId, Constant.SALT_AES));
+			} else {
+				params.put("p_logged_in_user", 0);
+			}
+			params.put("p_logged_in_user_person_type", loggedInUserPersonType);
+
+			List<GetApplicationTrackingResp> response = jdbcTemplate.query(query, params,
+					(rs, rowNum) -> new GetApplicationTrackingResp(rs.getLong("application_id"),
+							rs.getString("application_no"), rs.getString("school_year"), rs.getString("school"),
+							rs.getString("grade"), rs.getString("student_name"), rs.getLong("application_tracking_id"),
+							rs.getString("verification_date"), rs.getString("notice_date_30_day"),
+							rs.getString("notice_date_60_day"), rs.getString("cst_action"),
+							rs.getString("return_date")));
+
+			logger.debug("Record fetched successfully.");
+
+			return response;
+
+		} catch (Exception e) {
+			logger.error("Error fetching Application Tracking data: {}{}", e.getMessage(), e);
+			throw e;
+		}
+	}
+
+	public List<GetPhysicianInfoResp> getPhysicianInfoData(Long applicationId) throws Exception {
+
+		logger.debug("Calling db function fn_get_physician_info with parameter(s):applicationId  -{}", applicationId);
+
+		final String query = "SELECT * FROM fn_get_physician_info(:p_application_id)";
+
+		Map<String, Object> params = new HashMap<>();
+		params.put("p_application_id", applicationId);
+
+		try {
+
+			List<GetPhysicianInfoResp> physcInfoData = jdbcTemplate.query(query, params,
+					(rs, rowNum) -> new GetPhysicianInfoResp(rs.getString("physician_name"),
+							rs.getString("physician_sign_date")));
+
+			logger.debug("Application info record fetched successfully.");
+
+			return physcInfoData;
+
+		} catch (Exception e) {
+			logger.error("Exception occured while calling database function fn_get_application_info: {} {}",
+					e.getMessage(), e);
+			throw new Exception(e);
+		}
+	}
+}

@@ -1,0 +1,688 @@
+package com.jcboe.home.instruction.utilities;
+
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.zip.ZipEntry;
+
+import org.apache.commons.io.FileUtils;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import com.jcboe.home.instruction.response.HIFormTransactionResp;
+
+import net.lingala.zip4j.ZipFile;
+import net.lingala.zip4j.model.ZipParameters;
+import net.lingala.zip4j.model.enums.AesKeyStrength;
+import net.lingala.zip4j.model.enums.CompressionLevel;
+import net.lingala.zip4j.model.enums.CompressionMethod;
+import net.lingala.zip4j.model.enums.EncryptionMethod;
+
+class Zip4jUtilityTest {
+
+	private final Zip4jUtility utility = new Zip4jUtility();
+
+	@TempDir
+	Path tempDir;
+
+	private File createFile(String name, String content) throws IOException {
+		File file = new File(tempDir.toFile(), name);
+		FileUtils.writeStringToFile(file, content, StandardCharsets.UTF_8);
+		return file;
+	}
+
+	private File createEncryptedZip(File source, String zipName, String password) throws Exception {
+
+		File zip = new File(tempDir.toFile(), zipName);
+
+		ZipParameters params = new ZipParameters();
+		params.setCompressionMethod(CompressionMethod.DEFLATE);
+		params.setCompressionLevel(CompressionLevel.FASTEST);
+		params.setEncryptFiles(true);
+		params.setEncryptionMethod(EncryptionMethod.AES);
+		params.setAesKeyStrength(AesKeyStrength.KEY_STRENGTH_256);
+
+		try (ZipFile zipFile = new ZipFile(zip, password.toCharArray())) {
+			zipFile.addFile(source, params);
+		}
+
+		return zip;
+	}
+
+	@Test
+	void testCompressWithPassword_Success() throws Exception {
+
+		File doc = createFile("test.pdf", "dummy pdf content");
+
+		File result = utility.compressWithPassword(doc, "password123", tempDir.toString());
+
+		assertNotNull(result);
+		assertTrue(result.exists());
+		assertEquals("test.zip", result.getName());
+		assertTrue(result.length() > 0);
+	}
+
+	@Test
+	void testCompressWithPassword_ZipFile_Success() throws Exception {
+
+		File doc = createFile("test.zip", "dummy zip content");
+
+		File result = utility.compressWithPassword(doc, "password123", tempDir.toString());
+
+		assertNotNull(result);
+		assertTrue(result.exists());
+		assertEquals("test.zip", result.getName());
+		assertTrue(result.length() > 0);
+	}
+
+	@Test
+	void testCompressWithPassword_SourceFileDoesNotExist() {
+
+		File doc = new File(tempDir.toFile(), "does-not-exist.pdf");
+
+		assertThrows(Exception.class, () -> utility.compressWithPassword(doc, "password123", tempDir.toString()));
+	}
+
+	@Test
+	void testCompressWithPassword_InvalidTempPath() throws Exception {
+
+		File doc = createFile("test.pdf", "dummy pdf content");
+
+		File invalidParent = new File(tempDir.toFile(), "missing-parent");
+
+		String invalidPath = new File(invalidParent, "invalid.zip").getAbsolutePath();
+
+		assertThrows(Exception.class, () -> utility.compressWithPassword(doc, "password123", invalidPath));
+	}
+
+	@Test
+	void testCompressWithPassword_NullPassword() throws Exception {
+
+		File doc = createFile("test.pdf", "content");
+
+		assertThrows(Exception.class, () -> utility.compressWithPassword(doc, null, tempDir.toString()));
+	}
+
+	@Test
+	void testCompressWithPassword_ZipFile_DeletionException() throws Exception {
+
+		Zip4jUtility testUtility = new Zip4jUtility() {
+
+			@Override
+			public void permitFile(File file) {
+				throw new RuntimeException("Simulated deletion error");
+			}
+		};
+
+		File doc = createFile("test.zip", "dummy zip content");
+
+		File result = testUtility.compressWithPassword(doc, "password123", tempDir.toString());
+
+		assertNotNull(result);
+		assertTrue(result.exists());
+		assertEquals("test.zip", result.getName());
+	}
+
+	@Test
+	void testDecompressWithPassword_NormalFile_Success() throws Exception {
+
+		File sourceFile = createFile("test.pdf", "dummy pdf content");
+
+		File encryptedZip = utility.compressWithPassword(sourceFile, "correctPassword", tempDir.toString());
+
+		File result = utility.decompressWithPassword(encryptedZip, "test.pdf", "renamed.pdf", "pdf", "correctPassword",
+				tempDir.toString());
+
+		assertNotNull(result);
+		assertTrue(result.exists());
+		assertEquals("renamed.pdf", result.getName());
+		assertEquals("dummy pdf content", FileUtils.readFileToString(result, StandardCharsets.UTF_8));
+	}
+
+	@Test
+	void testDecompressWithPassword_ZipFile_Success() throws Exception {
+
+		File innerZip = createFile("inner.zip", "dummy inner zip content");
+
+		File outerZip = createEncryptedZip(innerZip, "outer.zip", "password123");
+
+		File result = utility.decompressWithPassword(outerZip, "inner.zip", "renamed.zip", "zip", "password123",
+				tempDir.toString());
+
+		assertNotNull(result);
+		assertTrue(result.exists());
+		assertEquals("renamed.zip", result.getName());
+	}
+
+	@Test
+	void testDecompressWithPassword_InvalidZip() throws Exception {
+
+		File invalidZip = createFile("invalid.zip", "invalid zip content");
+
+		assertThrows(Exception.class, () -> utility.decompressWithPassword(invalidZip, "test.pdf", "renamed.pdf", "pdf",
+				"password123", tempDir.toString()));
+	}
+
+	@Test
+	void testDecompressWithPassword_WrongPassword() throws Exception {
+
+		File sourceFile = createFile("test.pdf", "dummy pdf content");
+
+		File encryptedZip = utility.compressWithPassword(sourceFile, "correctPassword", tempDir.toString());
+
+		assertThrows(Exception.class, () -> utility.decompressWithPassword(encryptedZip, "test.pdf", "renamed.pdf",
+				"pdf", "wrongPassword", tempDir.toString()));
+	}
+
+	@Test
+	void testDecompressWithPassword_MissingEntry() throws Exception {
+
+		File sourceFile = createFile("test.pdf", "dummy pdf content");
+
+		File encryptedZip = utility.compressWithPassword(sourceFile, "correctPassword", tempDir.toString());
+
+		assertThrows(Exception.class, () -> utility.decompressWithPassword(encryptedZip, "missing.pdf", "renamed.pdf",
+				"pdf", "correctPassword", tempDir.toString()));
+	}
+
+	@Test
+	void testDecompressWithPassword_NullPassword() throws Exception {
+
+		File sourceFile = createFile("test.pdf", "content");
+
+		File encryptedZip = utility.compressWithPassword(sourceFile, "password123", tempDir.toString());
+
+		assertThrows(Exception.class, () -> utility.decompressWithPassword(encryptedZip, "test.pdf", "renamed.pdf",
+				"pdf", null, tempDir.toString()));
+	}
+
+	@Test
+	void testDecompressWithPassword_ZipFile_DeletionException() throws Exception {
+
+		Zip4jUtility testUtility = new Zip4jUtility() {
+
+			@Override
+			public void permitFile(File file) {
+				throw new RuntimeException("Simulated deletion exception");
+			}
+		};
+
+		File innerZip = createFile("inner.zip", "dummy inner zip content");
+
+		File outerZip = createEncryptedZip(innerZip, "outer.zip", "password123");
+
+		File result = testUtility.decompressWithPassword(outerZip, "inner.zip", "renamed.zip", "zip", "password123",
+				tempDir.toString());
+
+		assertNotNull(result);
+		assertEquals("renamed.zip", result.getName());
+	}
+
+	@Test
+	void testDecompressWithPassword_SubFolderDeletionException() throws Exception {
+
+		Zip4jUtility testUtility = new Zip4jUtility() {
+
+			@Override
+			public void permitFile(File file) {
+				if ("XXXXXX".equals(file.getName())) {
+					throw new RuntimeException("Simulated subfolder deletion error");
+				}
+				super.permitFile(file);
+			}
+		};
+
+		File innerZip = createFile("inner.zip", "dummy inner zip content");
+
+		File outerZip = createEncryptedZip(innerZip, "outer.zip", "password123");
+
+		File result = testUtility.decompressWithPassword(outerZip, "inner.zip", "renamed.zip", "zip", "password123",
+				tempDir.toString());
+
+		assertNotNull(result);
+		assertEquals("renamed.zip", result.getName());
+	}
+
+	@Test
+	void testZipMultipleFiles_Success() throws Exception {
+
+		File file = createFile("abc.txt", "content");
+
+		HIFormTransactionResp response = new HIFormTransactionResp();
+
+		response.setDownloadedFile(file);
+
+		File zip = utility.zipMultipleFiles(Collections.singletonList(response), tempDir.toString(), "files.zip",
+				"folder");
+
+		assertNotNull(zip);
+		assertTrue(zip.exists());
+		assertTrue(zip.length() > 0);
+
+		assertFalse(file.exists());
+	}
+
+	@Test
+	void testZipMultipleFiles_SkipsMissingFile() throws Exception {
+
+		File missingFile = new File(tempDir.toFile(), "missing.txt");
+
+		HIFormTransactionResp response = new HIFormTransactionResp();
+
+		response.setDownloadedFile(missingFile);
+
+		File zip = utility.zipMultipleFiles(Collections.singletonList(response), tempDir.toString(), "files.zip",
+				"folder");
+
+		assertNotNull(zip);
+		assertTrue(zip.exists());
+	}
+
+	@Test
+	void testZipMultipleFiles_SkipsDirectory() throws Exception {
+
+		File directory = new File(tempDir.toFile(), "directory");
+
+		assertTrue(directory.mkdirs());
+
+		HIFormTransactionResp response = new HIFormTransactionResp();
+
+		response.setDownloadedFile(directory);
+
+		File zip = utility.zipMultipleFiles(Collections.singletonList(response), tempDir.toString(), "files.zip",
+				"folder");
+
+		assertNotNull(zip);
+		assertTrue(zip.exists());
+		assertTrue(directory.exists());
+	}
+
+	@Test
+	void testZipMultipleFiles_EmptyList() throws Exception {
+
+		File zip = utility.zipMultipleFiles(Collections.emptyList(), tempDir.toString(), "empty.zip", "folder");
+
+		assertNotNull(zip);
+		assertTrue(zip.exists());
+	}
+
+	@Test
+	void testZipMultipleFiles_NullDownloadedFile() {
+
+		HIFormTransactionResp response = new HIFormTransactionResp();
+
+		response.setDownloadedFile(null);
+
+		List<HIFormTransactionResp> files = Collections.singletonList(response);
+
+		assertThrows(NullPointerException.class,
+				() -> utility.zipMultipleFiles(files, tempDir.toString(), "files.zip", "folder"));
+	}
+
+	@Test
+	void testZipMultipleFiles_VerifyEntry() throws Exception {
+
+		File file = createFile("abc.txt", "content");
+
+		HIFormTransactionResp response = new HIFormTransactionResp();
+
+		response.setDownloadedFile(file);
+
+		File zip = utility.zipMultipleFiles(Collections.singletonList(response), tempDir.toString(), "files.zip",
+				"folder");
+
+		try (java.util.zip.ZipFile zipFile = new java.util.zip.ZipFile(zip)) {
+
+			ZipEntry entry = zipFile.getEntry("folder/abc.txt");
+
+			assertNotNull(entry);
+			assertFalse(entry.isDirectory());
+		}
+	}
+
+	@Test
+	void testDocZipMultipleFiles_Success() throws Exception {
+
+		File file = createFile("doc.txt", "Document");
+
+		File zip = utility.docZipMultipleFiles(Collections.singletonList(file), tempDir.toString(), "docs.zip", "docs");
+
+		assertNotNull(zip);
+		assertTrue(zip.exists());
+		assertTrue(zip.length() > 0);
+		assertFalse(file.exists());
+	}
+
+	@Test
+	void testDocZipMultipleFiles_MultipleFiles() throws Exception {
+
+		File file1 = createFile("doc1.txt", "Document 1");
+
+		File file2 = createFile("doc2.txt", "Document 2");
+
+		File zip = utility.docZipMultipleFiles(Arrays.asList(file1, file2), tempDir.toString(), "docs.zip",
+				"documents");
+
+		assertNotNull(zip);
+		assertTrue(zip.exists());
+
+		assertFalse(file1.exists());
+		assertFalse(file2.exists());
+
+		try (java.util.zip.ZipFile zipFile = new java.util.zip.ZipFile(zip)) {
+
+			assertNotNull(zipFile.getEntry("documents/doc1.txt"));
+
+			assertNotNull(zipFile.getEntry("documents/doc2.txt"));
+		}
+	}
+
+	@Test
+	void testDocZipMultipleFiles_EmptyList() throws Exception {
+
+		File zip = utility.docZipMultipleFiles(Collections.emptyList(), tempDir.toString(), "empty.zip", "docs");
+
+		assertNotNull(zip);
+		assertTrue(zip.exists());
+	}
+
+	@Test
+	void testDocZipMultipleFiles_NonExistingFile() {
+
+		File missingFile = new File(tempDir.toFile(), "missing.txt");
+
+		assertThrows(Exception.class, () -> utility.docZipMultipleFiles(Collections.singletonList(missingFile),
+				tempDir.toString(), "docs.zip", "docs"));
+	}
+
+	@Test
+	void testDocZipMultipleFiles_Directory() throws Exception {
+
+		File directory = new File(tempDir.toFile(), "directory");
+
+		assertTrue(directory.mkdirs());
+
+		assertThrows(Exception.class, () -> utility.docZipMultipleFiles(Collections.singletonList(directory),
+				tempDir.toString(), "docs.zip", "docs"));
+	}
+
+	@Test
+	void testCreateDirIfNotExists_CreatesDirectory() {
+
+		File dir = new File(tempDir.toFile(), "newDirectory");
+
+		assertFalse(dir.exists());
+
+		utility.createDirIfNotExists(dir);
+
+		assertTrue(dir.exists());
+		assertTrue(dir.isDirectory());
+	}
+
+	@Test
+	void testCreateDirIfNotExists_ExistingDirectory() throws Exception {
+
+		File dir = new File(tempDir.toFile(), "existingDirectory");
+
+		assertTrue(dir.mkdirs());
+
+		assertDoesNotThrow(() -> utility.createDirIfNotExists(dir));
+
+		assertTrue(dir.exists());
+		assertTrue(dir.isDirectory());
+	}
+
+	@Test
+	void testCreateDirIfNotExists_ExistingFile() throws Exception {
+
+		File file = createFile("existing-file", "content");
+
+		assertTrue(file.exists());
+		assertFalse(file.isDirectory());
+
+		assertDoesNotThrow(() -> utility.createDirIfNotExists(file));
+
+		assertTrue(file.exists());
+		assertFalse(file.isDirectory());
+	}
+
+	@Test
+	void testPermitFile_ExistingFile() throws Exception {
+
+		File file = createFile("permit.txt", "content");
+
+		assertDoesNotThrow(() -> utility.permitFile(file));
+
+		assertTrue(file.exists());
+	}
+
+	@Test
+	void testPermitFile_NonExistingFile() {
+
+		File file = new File(tempDir.toFile(), "missing.txt");
+
+		assertFalse(file.exists());
+
+		assertDoesNotThrow(() -> utility.permitFile(file));
+	}
+
+	@Test
+	void testPermitFile_ExistingDirectory() throws Exception {
+
+		File directory = new File(tempDir.toFile(), "permitDirectory");
+
+		assertTrue(directory.mkdirs());
+
+		assertDoesNotThrow(() -> utility.permitFile(directory));
+
+		assertTrue(directory.exists());
+		assertTrue(directory.isDirectory());
+	}
+
+	@Test
+	void testUnzip_Success() throws Exception {
+
+		File sourceFile = createFile("sample.txt", "Testing unzip");
+
+		File zip = utility.docZipMultipleFiles(Collections.singletonList(sourceFile), tempDir.toString(), "archive.zip",
+				"folder");
+
+		File output = new File(tempDir.toFile(), "out");
+
+		List<File> extracted = utility.unzip(zip.getAbsolutePath(), output.getAbsolutePath());
+
+		assertNotNull(extracted);
+		assertEquals(1, extracted.size());
+		assertTrue(extracted.get(0).exists());
+
+		assertEquals("Testing unzip", FileUtils.readFileToString(extracted.get(0), StandardCharsets.UTF_8));
+	}
+
+	@Test
+	void testUnzip_CreatesDestinationDirectory() throws Exception {
+
+		File sourceFile = createFile("sample.txt", "Testing unzip");
+
+		File zip = utility.docZipMultipleFiles(Collections.singletonList(sourceFile), tempDir.toString(), "archive.zip",
+				"folder");
+
+		File output = new File(tempDir.toFile(), "newOutput");
+
+		assertFalse(output.exists());
+
+		List<File> extracted = utility.unzip(zip.getAbsolutePath(), output.getAbsolutePath());
+
+		assertTrue(output.exists());
+		assertTrue(output.isDirectory());
+		assertEquals(1, extracted.size());
+	}
+
+	@Test
+	void testUnzip_ExistingDestinationDirectory() throws Exception {
+
+		File sourceFile = createFile("existing.txt", "Existing destination test");
+
+		File zip = utility.docZipMultipleFiles(Collections.singletonList(sourceFile), tempDir.toString(),
+				"existing-destination.zip", "folder");
+
+		File output = new File(tempDir.toFile(), "existingOutput");
+
+		assertTrue(output.mkdirs());
+
+		List<File> result = utility.unzip(zip.getAbsolutePath(), output.getAbsolutePath());
+
+		assertNotNull(result);
+		assertEquals(1, result.size());
+		assertTrue(result.get(0).exists());
+	}
+
+	@Test
+	void testUnzip_InvalidZip() throws Exception {
+
+		File invalidZip = createFile("invalid.zip", "invalid content");
+
+		File output = new File(tempDir.toFile(), "output");
+
+		assertThrows(Exception.class, () -> utility.unzip(invalidZip.getAbsolutePath(), output.getAbsolutePath()));
+	}
+
+	@Test
+	void testUnzip_EmptyZip() throws Exception {
+
+		File zip = new File(tempDir.toFile(), "empty.zip");
+
+		try (java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(
+				Files.newOutputStream(zip.toPath()))) {
+			// Empty ZIP
+		}
+
+		File output = new File(tempDir.toFile(), "emptyOutput");
+
+		List<File> result = utility.unzip(zip.getAbsolutePath(), output.getAbsolutePath());
+
+		assertNotNull(result);
+		assertTrue(result.isEmpty());
+	}
+
+	@Test
+	void testUnzip_NestedDirectories() throws Exception {
+
+		File zip = new File(tempDir.toFile(), "nested.zip");
+
+		try (java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(
+				Files.newOutputStream(zip.toPath()))) {
+
+			zos.putNextEntry(new ZipEntry("folder/subfolder/"));
+			zos.closeEntry();
+
+			zos.putNextEntry(new ZipEntry("folder/subfolder/file.txt"));
+
+			zos.write("nested content".getBytes(StandardCharsets.UTF_8));
+
+			zos.closeEntry();
+		}
+
+		File output = new File(tempDir.toFile(), "nestedOutput");
+
+		List<File> result = utility.unzip(zip.getAbsolutePath(), output.getAbsolutePath());
+
+		assertEquals(1, result.size());
+		assertTrue(result.get(0).exists());
+		assertEquals("nested content", FileUtils.readFileToString(result.get(0), StandardCharsets.UTF_8));
+	}
+
+	@Test
+	void testUnzip_NestedDirectories_VerifyPath() throws Exception {
+
+		File zip = new File(tempDir.toFile(), "nested-path.zip");
+
+		try (java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(
+				Files.newOutputStream(zip.toPath()))) {
+
+			ZipEntry entry = new ZipEntry("a/b/c/test.txt");
+
+			zos.putNextEntry(entry);
+
+			zos.write("hello".getBytes(StandardCharsets.UTF_8));
+
+			zos.closeEntry();
+		}
+
+		File output = new File(tempDir.toFile(), "nested-path-output");
+
+		List<File> result = utility.unzip(zip.getAbsolutePath(), output.getAbsolutePath());
+
+		assertEquals(1, result.size());
+
+		File extracted = result.get(0);
+
+		assertTrue(extracted.exists());
+		assertEquals("test.txt", extracted.getName());
+		assertEquals("hello", FileUtils.readFileToString(extracted, StandardCharsets.UTF_8));
+
+		assertEquals(new File(output, "a/b/c/test.txt").getCanonicalPath(), extracted.getCanonicalPath());
+	}
+
+	@Test
+	void testUnzip_ZipSlipAttack() throws Exception {
+
+		File maliciousZip = new File(tempDir.toFile(), "malicious.zip");
+
+		try (java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(
+				Files.newOutputStream(maliciousZip.toPath()))) {
+
+			ZipEntry entry = new ZipEntry("../../evil.txt");
+
+			zos.putNextEntry(entry);
+
+			zos.write("malicious".getBytes(StandardCharsets.UTF_8));
+
+			zos.closeEntry();
+		}
+
+		File output = new File(tempDir.toFile(), "safeOutput");
+
+		assertThrows(Exception.class, () -> utility.unzip(maliciousZip.getAbsolutePath(), output.getAbsolutePath()));
+
+		File evilFile = new File(output.getParentFile(), "evil.txt");
+
+		assertFalse(evilFile.exists());
+	}
+
+	@Test
+	void testUnzip_ZipSlipAbsolutePath() throws Exception {
+
+		File maliciousZip = new File(tempDir.toFile(), "absolute-malicious.zip");
+
+		try (java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(
+				Files.newOutputStream(maliciousZip.toPath()))) {
+
+			ZipEntry entry = new ZipEntry("/evil.txt");
+
+			zos.putNextEntry(entry);
+
+			zos.write("malicious".getBytes(StandardCharsets.UTF_8));
+
+			zos.closeEntry();
+		}
+
+		File output = new File(tempDir.toFile(), "safeOutputAbsolute");
+
+		/*
+		 * newFile() validates the canonical path before extraction.
+		 */
+		assertThrows(Exception.class, () -> utility.unzip(maliciousZip.getAbsolutePath(), output.getAbsolutePath()));
+	}
+}
